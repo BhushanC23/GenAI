@@ -24,3 +24,26 @@ https://kubernetes.io/docs/concepts/
 - Created day01_menu.py
 - Practised Python variables, input and f-strings
 - Practised conditions and loops
+
+## Day 2 Progress
+- Added 18 real Kubernetes records from the official documentation.
+- Practised list and dictionary based data handling.
+- Added keyword search and category counting.
+- Organised reusable functions in `app/records.py`.
+- Added a modular `app/` and `data/` project structure.
+- Added a CLI for searching and viewing Kubernetes records.
+
+## How to Run
+
+From the `GenAI` directory:
+
+```text
+python -m app.cli
+```
+
+The project uses only Python's standard library, so no package installation is
+required. A virtual environment can be created locally with:
+
+```text
+python -m venv .venv
+```
