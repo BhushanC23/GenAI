@@ -1,0 +1,68 @@
+[
+  {
+    "id": "pod",
+    "title": "Pods",
+    "category": "workload",
+    "filename": "pods.md",
+    "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+    "raw_url": "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/concepts/workloads/pods/_index.md",
+    "bytes": 26031,
+    "fetched_at": "2026-11-11T15:52:52.814598Z",
+    "status": "success"
+  },
+  {
+    "id": "deployment",
+    "title": "Deployments",
+    "category": "workload",
+    "filename": "deployment.md",
+    "source_url": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/",
+    "raw_url": "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/concepts/workloads/controllers/deployment.md",
+    "bytes": 59790,
+    "fetched_at": "2026-11-11T15:52:53.482346Z",
+    "status": "success"
+  },
+  {
+    "id": "service",
+    "title": "Services",
+    "category": "networking",
+    "filename": "service.md",
+    "source_url": "https://kubernetes.io/docs/concepts/services-networking/service/",
+    "raw_url": "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/concepts/services-networking/service.md",
+    "bytes": 46852,
+    "fetched_at": "2026-11-11T15:52:57.980779Z",
+    "status": "success"
+  },
+  {
+    "id": "configmap",
+    "title": "ConfigMaps",
+    "category": "configuration",
+    "filename": "configmap.md",
+    "source_url": "https://kubernetes.io/docs/concepts/configuration/configmap/",
+    "raw_url": "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/concepts/configuration/configmap.md",
+    "bytes": 12932,
+    "fetched_at": "2026-11-11T15:53:00.786708Z",
+    "status": "success"
+  },
+  {
+    "id": "namespace",
+    "title": "Namespaces",
+    "category": "cluster-management",
+    "filename": "namespaces.md",
+    "source_url": "https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/",
+    "raw_url": "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/concepts/overview/working-with-objects/namespaces.md",
+    "bytes": 6420,
+    "fetched_at": "2026-11-11T15:53:05.440468Z",
+    "status": "success"
+  },
+  {
+    "id": "ingress",
+    "title": "Ingress",
+    "category": "networking",
+    "filename": "ingress.md",
+    "source_url": "https://kubernetes.io/docs/concepts/services-networking/ingress/",
+    "raw_url": "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/concepts/services-networking/ingress.md",
+    "bytes": 29055,
+    "fetched_at": "2026-11-11T15:53:13.268092Z",
+    "status": "success"
+  }
+]

@@ -1,18 +1,11 @@
-#KUBECOACH day 1 introduction
-    
+# KUBECOACH day 1 introduction
 
-from itertools import product
-
-
-Product = "KUBECOACH"
+product = "KUBECOACH"
 problem = "Understanding Kubernetes objects and kubectl commands"
 user = "final year IT Students"
 data_source = "Kubernetes official documentation"
 
-
 print("WELCOME TO", product)
-
-
 print(f"Product: {product}")
 print(f"Target User: {user}")
 print(f"Problem: {problem}")
