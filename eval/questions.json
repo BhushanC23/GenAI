@@ -1,0 +1,72 @@
+[
+  {
+    "id": "Q1",
+    "question": "What is a Pod?",
+    "category": "workload",
+    "testing": "Tests basic definition and kubectl command retrieval for the smallest deployable unit in Kubernetes.",
+    "unanswerable": false
+  },
+  {
+    "id": "Q2",
+    "question": "What is a Deployment?",
+    "category": "workload",
+    "testing": "Tests controller concept retrieval for declarative updates and replica management of application workloads.",
+    "unanswerable": false
+  },
+  {
+    "id": "Q3",
+    "question": "What is a Kubernetes Service?",
+    "category": "networking",
+    "testing": "Tests networking abstraction retrieval for exposing a set of pods with a stable cluster IP or endpoint.",
+    "unanswerable": false
+  },
+  {
+    "id": "Q4",
+    "question": "How do I store sensitive credentials like passwords and API keys in Kubernetes?",
+    "category": "configuration",
+    "testing": "Tests configuration security retrieval regarding Secret objects and base64 encoding defaults.",
+    "unanswerable": false
+  },
+  {
+    "id": "Q5",
+    "question": "How do I isolate resources and define team permissions within a single cluster?",
+    "category": "cluster-management",
+    "testing": "Tests cluster management and RBAC retrieval regarding Namespaces and RoleBindings.",
+    "unanswerable": false
+  },
+  {
+    "id": "Q6",
+    "question": "How do I configure an Istio Service Mesh with Mutual TLS (mTLS) across multi-cluster deployments?",
+    "category": "service-mesh",
+    "testing": "Tests out-of-scope handling; Istio service mesh is not part of the core 18 Kubernetes concepts knowledge base.",
+    "unanswerable": true
+  },
+  {
+    "id": "Q7",
+    "question": "How do I ensure a logging or monitoring pod runs on every single worker node in my cluster?",
+    "category": "workload",
+    "testing": "Tests controller retrieval for DaemonSet object behavior and node-level workload placement.",
+    "unanswerable": false
+  },
+  {
+    "id": "Q8",
+    "question": "What is the difference between a ConfigMap and a Secret for environment variables?",
+    "category": "configuration",
+    "testing": "Tests comparative retrieval between plain-text configuration data and confidential credential storage.",
+    "unanswerable": false
+  },
+  {
+    "id": "Q9",
+    "question": "How can an administrator restrict total CPU and memory consumption in a specific namespace?",
+    "category": "cluster-management",
+    "testing": "Tests policy and resource boundary retrieval regarding ResourceQuota objects and hard limits.",
+    "unanswerable": false
+  },
+  {
+    "id": "Q10",
+    "question": "What controller should I use for a stateful database that requires stable network identities and dedicated storage?",
+    "category": "workload",
+    "testing": "Tests stateful controller retrieval for StatefulSets and ordered pod management policies.",
+    "unanswerable": false
+  }
+]

@@ -76,6 +76,22 @@ Official Kubernetes documentation is extensive and technically dense. Beginners 
 - **Comprehensive Test Suite (`tests/test_day04.py`):**
   - 18 automated unit tests using `fastapi.testclient.TestClient` covering endpoint contracts, query parameters, 404 handling, Pydantic validation, and question persistence. Total test suite now runs 34 passing tests.
 
+## Day 5 Progress — Deep Learning and LLM Fundamentals
+- **Comprehensive LLM Technical Guide ([`docs/how_llms_work.md`](docs/how_llms_work.md)):**
+  - Documented the AI hierarchy (Artificial Intelligence vs. Machine Learning vs. Deep Learning) and why deep neural representations outperform brittle rule-based expert systems for technical language.
+  - Explained tokenization (Byte-Pair Encoding), vector embeddings (semantic coordinate spaces), and the Transformer architecture with self-attention ($Q, K, V$ mechanics).
+  - Walked through autoregressive next-token prediction and the three training stages: Pre-training, Instruction Fine-Tuning (SFT), and Reinforcement Learning from Human Feedback (RLHF).
+  - Analyzed critical DevOps limitations of LLMs: hallucinations (fabricating invalid `kubectl` flags), finite context windows, knowledge cutoff, and per-token compute costs.
+  - Added a visual Mermaid architecture diagram illustrating the end-to-end LLM inference lifecycle.
+- **Evaluation Benchmark Dataset ([`eval/questions.json`](eval/questions.json)):**
+  - Formulated a 10-question evaluation benchmark spanning container workloads, networking, configuration, storage, and cluster administration.
+  - Included 6 core questions from the official project card plus 4 realistic beginner DevOps queries.
+  - Marked question **Q6** (*"How do I configure an Istio Service Mesh with Mutual TLS (mTLS) across multi-cluster deployments?"*) as `unanswerable: true`.
+  - **Why Q6 is Unanswerable:** KubeCoach's current knowledge base is grounded strictly in the 18 core Kubernetes concepts from official documentation. Istio and third-party service meshes represent an external domain outside this core knowledge base; marking Q6 unanswerable establishes an honesty benchmark so future RAG systems safely refuse out-of-scope queries rather than hallucinating answers.
+- **Checkpoint 1 Evaluation Guide ([`docs/checkpoint_1.md`](docs/checkpoint_1.md)):**
+  - Prepared step-by-step instructions for running the FastAPI application, demonstrating Swagger UI at `/docs`, and answering viva questions.
+  - Included a beginner-friendly, line-by-line breakdown of `smart_search()` in `app/smart_search.py` covering inputs, corpus generation, TF-IDF vectorization, Cosine Similarity math, and top-3 ranking.
+
 ---
 
 ## Repository Structure
@@ -100,6 +116,11 @@ GenAI/
 │   ├── raw/                 # Downloaded raw documentation files
 │   ├── records.json         # Standardized JSON knowledge base
 │   └── questions.json       # Persisted student questions
+├── docs/
+│   ├── how_llms_work.md     # Day 5: LLM fundamentals, Transformer & attention guide
+│   └── checkpoint_1.md      # Day 5: Checkpoint 1 review & viva preparation guide
+├── eval/
+│   └── questions.json       # Day 5: 10 real user evaluation questions (with Q6 unanswerable)
 ├── tests/
 │   ├── __init__.py
 │   ├── test_day03.py        # Day 3 test suite (16 tests)
@@ -189,7 +210,7 @@ python -m app.smart_search
 ### 6. Run Complete Test Suite (Days 3 & 4)
 
 ```bash
-python -m unittest discover tests
+python -m unittest discover tests -v
 ```
 *(Runs all 34 automated unit tests)*
 
