@@ -1,7 +1,7 @@
 """FastAPI backend application for KubeCoach.
 
 Exposes RESTful endpoints for health status, querying Kubernetes records,
-TF-IDF smart search, and student question submission.
+TF-IDF smart search, student question submission, and LLM-powered educational chat.
 """
 
 import json
@@ -20,6 +20,13 @@ if str(REPO_ROOT) not in sys.path:
 from fastapi import FastAPI, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from app.llm import (
+    LLMAuthenticationError,
+    LLMError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+    generate_chat_response,
+)
 from app.records import get_by_id, load_records
 from app.smart_search import smart_search
 
@@ -67,6 +74,32 @@ class QuestionResponse(BaseModel):
     timestamp: str
 
 
+class ChatRequest(BaseModel):
+    """Schema for student chat prompt sent to the LLM assistant."""
+
+    question: str = Field(
+        ...,
+        min_length=2,
+        max_length=1000,
+        description="The Kubernetes concept or command question to ask KubeCoach.",
+        example="What is a Pod and how do I inspect its logs?",
+    )
+    user_name: Optional[str] = Field(
+        default="Anonymous",
+        max_length=100,
+        description="Optional user name or student ID.",
+        example="Bhushan",
+    )
+
+
+class ChatResponse(BaseModel):
+    """Structured response schema returned by KubeCoach LLM."""
+
+    answer: str = Field(..., description="Plain-English explanation with kubectl commands.")
+    confidence: str = Field(..., description="Confidence level: high, medium, or low.")
+    follow_up: str = Field(..., description="A helpful next question to test understanding.")
+
+
 class HealthResponse(BaseModel):
     """Schema for API health status."""
 
@@ -84,6 +117,7 @@ def root() -> Dict[str, str]:
         "docs_url": "/docs",
         "health_url": "/health",
         "search_url": "/search?q=pod",
+        "chat_url": "/chat",
     }
 
 
@@ -201,3 +235,53 @@ def submit_question(payload: QuestionRequest) -> QuestionResponse:
         user_name=user_name,
         timestamp=timestamp,
     )
+
+
+@app.post(
+    "/chat",
+    response_model=ChatResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Chat"],
+)
+def chat_with_kubecoach(payload: ChatRequest) -> ChatResponse:
+    """Ask KubeCoach a question and receive structured explanation with kubectl commands."""
+    question_text = payload.question.strip()
+    logger.info("Chat request received from '%s': %s", payload.user_name, question_text)
+
+    try:
+        response_dict = generate_chat_response(prompt=question_text)
+        return ChatResponse(
+            answer=response_dict["answer"],
+            confidence=response_dict["confidence"],
+            follow_up=response_dict["follow_up"],
+        )
+    except LLMAuthenticationError as auth_err:
+        logger.error("LLM authentication failure: %s", auth_err)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"LLM provider authentication error: {auth_err}",
+        )
+    except LLMRateLimitError as rate_err:
+        logger.warning("LLM rate limit hit: %s", rate_err)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="LLM provider rate limit exceeded. Please wait a moment before trying again.",
+        )
+    except LLMTimeoutError as timeout_err:
+        logger.error("LLM timeout: %s", timeout_err)
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="LLM provider request timed out. Please try again.",
+        )
+    except LLMError as llm_err:
+        logger.error("LLM provider error: %s", llm_err)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"LLM provider error: {llm_err}",
+        )
+    except Exception as exc:
+        logger.exception("Unexpected error in /chat endpoint: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal server error occurred while generating response.",
+        )

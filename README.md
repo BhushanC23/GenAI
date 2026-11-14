@@ -92,6 +92,31 @@ Official Kubernetes documentation is extensive and technically dense. Beginners 
   - Prepared step-by-step instructions for running the FastAPI application, demonstrating Swagger UI at `/docs`, and answering viva questions.
   - Included a beginner-friendly, line-by-line breakdown of `smart_search()` in `app/smart_search.py` covering inputs, corpus generation, TF-IDF vectorization, Cosine Similarity math, and top-3 ranking.
 
+## Day 6 Progress — LLM Integration & Prompt Engineering
+- **Unified LLM Provider Wrapper ([`app/llm.py`](app/llm.py)):**
+  - Architected a multi-provider LLM client supporting **Groq** (`groq.Groq` SDK) and **Google Gemini** (direct HTTP REST via `httpx` to ensure broad Python compatibility).
+  - Built an offline **Grounded Mock Provider** backed by the local 18-record knowledge base and TF-IDF search so development, CI/CD, and offline testing operate with zero external API key requirements.
+  - Implemented resilient error handling with custom exceptions: `LLMConfigurationError`, `LLMAuthenticationError`, `LLMRateLimitError`, `LLMTimeoutError`, and `LLMProviderError`.
+  - Added robust structured JSON response parsing with regex fallback to extract `answer`, `confidence`, and `follow_up` fields even when providers wrap output in Markdown code blocks or return conversational preambles.
+- **Interactive Chat Endpoint (`POST /chat` in [`app/main.py`](app/main.py)):**
+  - Added `ChatRequest` (validating `query` between 3 and 1,000 characters) and `ChatResponse` (`answer`, `confidence`, `follow_up`, `provider`, `model`, `grounded_records`).
+  - Integrated provider-agnostic inference returning structured JSON.
+  - Mapped LLM error conditions to explicit HTTP status codes: `429 Too Many Requests`, `502 Bad Gateway`, `503 Service Unavailable`, and `504 Gateway Timeout`.
+  - Preserved 100% backward compatibility with all Day 4 endpoints (`/`, `/health`, `/records`, `/records/{id}`, `/search`, `/questions`).
+- **Prompt Engineering Library (`prompts/`):**
+  - **Master System Prompt ([`prompts/system_prompt.md`](prompts/system_prompt.md)):** Establishes KubeCoach persona, target audience of final-year students, educational clarity, strict zero-hallucination policy (admitting unknowns rather than fabricating), and structured JSON output schema.
+  - **Concept Explanation Template ([`prompts/explain_concept.md`](prompts/explain_concept.md)):** 5-part educational framework: 1-sentence definition, "Why it exists", real-world analogy, primary `kubectl` command, and default limits.
+  - **Kubectl Command Helper ([`prompts/kubectl_helper.md`](prompts/kubectl_helper.md)):** Practical operator prompt providing command syntax, breakdown of critical flags, safety warnings (`--force`, `--grace-period=0`), and verification commands.
+- **Systematic Prompt Evaluation ([`eval/prompt_compare.md`](eval/prompt_compare.md)):**
+  - Conducted a side-by-side benchmark comparing **Prompt A (Baseline/Generic)** vs. **Prompt B (Structured/Grounded KubeCoach)** across all 10 questions in `eval/questions.json`.
+  - Scored both variants across Groundedness (1–5), Beginner Clarity (1–5), Actionable kubectl (1–5), and Format Compliance (1–5).
+  - Confirmed that Prompt B scored **19.8 / 20** average vs. **10.9 / 20** for Prompt A, completely eliminating hallucination on question **Q6** (Istio mTLS) through grounded honest refusal.
+- **Environment & Security Management:**
+  - Created [`.env.example`](.env.example) with placeholder keys (`LLM_PROVIDER`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `LLM_MODEL`, hyperparameters).
+  - Configured [`.gitignore`](.gitignore) so actual `.env` files with secret API keys are never committed to version control.
+- **Comprehensive Test Suite ([`tests/test_day06.py`](tests/test_day06.py)):**
+  - Added 13 automated unit tests covering provider initialization, structured JSON parsing, mock responses, prompt file existence, `/chat` endpoint status codes, validation errors, and endpoint regression tests. Total test suite now runs **47 passing tests**.
+
 ---
 
 ## Repository Structure
@@ -103,9 +128,10 @@ GenAI/
 │   ├── cli.py               # Day 2: Interactive CLI explorer
 │   ├── fetch.py             # Day 3: Official Kubernetes docs HTTP fetcher
 │   ├── ingest.py            # Day 3: Markdown parsing and JSON ingestion pipeline
+│   ├── llm.py               # Day 6: Unified LLM provider wrapper (Groq, Gemini, Mock)
+│   ├── main.py              # Day 4/6: FastAPI REST API backend & /chat endpoint
 │   ├── models.py            # Day 3: Record dataclass and custom exception types
 │   ├── records.py           # Day 2/3: Record loading and querying functions
-│   ├── main.py              # Day 4: FastAPI REST API backend
 │   └── smart_search.py      # Day 4: TF-IDF vectorization & Cosine Similarity search
 ├── analysis/
 │   ├── __init__.py
@@ -114,20 +140,27 @@ GenAI/
 │   ├── __init__.py
 │   ├── manifest.json        # Fetch metadata provenance (in data/raw/)
 │   ├── raw/                 # Downloaded raw documentation files
-│   ├── records.json         # Standardized JSON knowledge base
+│   ├── records.json         # Standardized JSON knowledge base (18 records)
 │   └── questions.json       # Persisted student questions
 ├── docs/
 │   ├── how_llms_work.md     # Day 5: LLM fundamentals, Transformer & attention guide
 │   └── checkpoint_1.md      # Day 5: Checkpoint 1 review & viva preparation guide
 ├── eval/
+│   ├── prompt_compare.md    # Day 6: Systematic Prompt A vs. Prompt B comparison
 │   └── questions.json       # Day 5: 10 real user evaluation questions (with Q6 unanswerable)
+├── prompts/
+│   ├── explain_concept.md   # Day 6: Structured concept explanation prompt template
+│   ├── kubectl_helper.md    # Day 6: Practical kubectl command helper prompt template
+│   └── system_prompt.md     # Day 6: Master system prompt enforcing persona & JSON schema
 ├── tests/
 │   ├── __init__.py
 │   ├── test_day03.py        # Day 3 test suite (16 tests)
-│   └── test_day04.py        # Day 4 test suite (18 tests)
+│   ├── test_day04.py        # Day 4 test suite (18 tests)
+│   └── test_day06.py        # Day 6 test suite (13 tests)
+├── .env.example             # Day 6: Environment configuration template
 ├── day01_intro.py           # Day 1 introduction script
 ├── day01_menu.py            # Day 1 menu script
-├── requirements.txt         # Project dependencies
+├── requirements.txt         # Project dependencies (FastAPI, Groq, Pandas, etc.)
 ├── README.md                # Documentation
 └── .gitignore
 ```
@@ -139,11 +172,12 @@ GenAI/
 | Method | Endpoint | Description | Status Codes |
 |---|---|---|---|
 | `GET` | `/` | Welcome message and API overview | `200 OK` |
-| `GET` | `/health` | API operational health and record count | `200 OK` |
+| `GET` | `/health` | API operational health, record count, and LLM provider | `200 OK` |
 | `GET` | `/records?limit=` | List all records, optionally limited (`1 <= limit <= 100`) | `200 OK`, `422 Unprocessable` |
 | `GET` | `/records/{record_id}` | Retrieve single Kubernetes concept by ID | `200 OK`, `404 Not Found` |
 | `GET` | `/search?q=` | Smart TF-IDF search ranking top 3 relevant concepts | `200 OK` |
 | `POST` | `/questions` | Submit a student question; appends to `data/questions.json` | `201 Created`, `422 Unprocessable` |
+| `POST` | `/chat` | Chat with KubeCoach LLM assistant; returns structured JSON | `200 OK`, `422 Unprocessable`, `429 Too Many Requests`, `502 Bad Gateway`, `503 Unavailable`, `504 Gateway Timeout` |
 
 ---
 
@@ -160,11 +194,23 @@ python -m venv .venv
 # Windows PowerShell:
 .\.venv\Scripts\Activate.ps1
 
-# Install dependencies (requests, fastapi, uvicorn, pydantic, pandas, scikit-learn, httpx)
+# Install dependencies (requests, fastapi, uvicorn, pydantic, pandas, scikit-learn, httpx, python-dotenv, groq)
 python -m pip install -r requirements.txt
 ```
 
-### 2. Start the FastAPI Server (Uvicorn)
+### 2. Configure Environment Variables
+
+```bash
+# Copy the template to .env
+cp .env.example .env
+
+# Edit .env with your preferred provider and API key:
+# LLM_PROVIDER=groq     # or "gemini", or "mock" (offline testing default)
+# GROQ_API_KEY=gsk_...
+# GEMINI_API_KEY=AIzaSy_...
+```
+
+### 3. Start the FastAPI Server (Uvicorn)
 
 ```bash
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
@@ -174,10 +220,10 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - Interactive Swagger UI Documentation: `http://127.0.0.1:8000/docs`
 - Alternative ReDoc Documentation: `http://127.0.0.1:8000/redoc`
 
-### 3. Example API Requests
+### 4. Example API Requests
 
 ```bash
-# Health check
+# Health check (includes provider status)
 curl -X GET http://127.0.0.1:8000/health
 
 # Get first 3 records
@@ -189,30 +235,47 @@ curl -X GET http://127.0.0.1:8000/records/pod
 # Smart TF-IDF search
 curl -X GET "http://127.0.0.1:8000/search?q=how+to+rollout+deployments"
 
-# Submit a question
+# Submit a student question
 curl -X POST http://127.0.0.1:8000/questions \
      -H "Content-Type: application/json" \
      -d '{"question": "What is the difference between a Pod and a Service?", "user_name": "Bhushan"}'
+
+# Chat with LLM assistant (Day 6: returns structured JSON with confidence and follow-up)
+curl -X POST http://127.0.0.1:8000/chat \
+     -H "Content-Type: application/json" \
+     -d '{"query": "What is a Pod and how do I list running pods?"}'
 ```
 
-### 4. Run Pandas Exploratory Analysis
+Example JSON response from `POST /chat`:
+```json
+{
+  "answer": "A Pod is the smallest deployable compute unit in Kubernetes representing a single instance of a running process.\n\nTo list running pods with wide output, execute:\n```bash\nkubectl get pods -o wide\n```",
+  "confidence": "high",
+  "follow_up": "Would you like to know how Deployments manage Pod replica sets and rolling updates?",
+  "provider": "mock",
+  "model": "grounded-seed-knowledge-base",
+  "grounded_records": ["pod"]
+}
+```
+
+### 5. Run Pandas Exploratory Analysis
 
 ```bash
 python -m analysis.explore
 ```
 
-### 5. Run TF-IDF Smart Search CLI Tester
+### 6. Run TF-IDF Smart Search CLI Tester
 
 ```bash
 python -m app.smart_search
 ```
 
-### 6. Run Complete Test Suite (Days 3 & 4)
+### 7. Run Complete Test Suite (Days 3, 4 & 6)
 
 ```bash
 python -m unittest discover tests -v
 ```
-*(Runs all 34 automated unit tests)*
+*(Runs all 47 automated unit tests across models, ingestion, REST endpoints, smart search, and LLM providers)*
 
 ### 7. Run Earlier Day Modules
 
