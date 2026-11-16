@@ -15,3 +15,10 @@ env/
 .env
 .env.*
 !.env.example
+
+# Vector storage and persistent embedding cache
+data/chroma_db/
+.chroma/
+chroma_db/
+*.chroma
+.cache/

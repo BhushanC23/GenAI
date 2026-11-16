@@ -17,6 +17,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+# Initialize ChromaDB and HNSW vector runtime before other C-extensions (e.g. scikit-learn / OpenMP)
+import hnswlib
+import chromadb
+from app.vectorstore import VectorStoreError, get_vector_store
+
 from fastapi import FastAPI, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
@@ -28,7 +33,6 @@ from app.llm import (
     generate_chat_response,
 )
 from app.records import get_by_id, load_records
-from app.smart_search import smart_search
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +45,18 @@ app = FastAPI(
     description="Educational API providing beginner-friendly Kubernetes concepts, kubectl commands, and smart search.",
     version="1.0.0",
 )
+
+
+@app.on_event("startup")
+def startup_event() -> None:
+    """Initialize and warm up ChromaDB vector store on the main thread."""
+    try:
+        from app.vectorstore import get_vector_store
+
+        store = get_vector_store()
+        store.get_collection()
+    except Exception as exc:
+        logger.warning("Vector store startup warmup failed: %s", exc)
 
 QUESTIONS_FILE_PATH = REPO_ROOT / "data" / "questions.json"
 
@@ -100,6 +116,28 @@ class ChatResponse(BaseModel):
     follow_up: str = Field(..., description="A helpful next question to test understanding.")
 
 
+class SemanticSearchResult(BaseModel):
+    """Schema for individual semantic vector search match."""
+
+    chunk_id: str = Field(..., description="Unique chunk identifier.")
+    text: str = Field(..., description="Extracted text chunk content.")
+    similarity: float = Field(..., description="Cosine similarity score (0.0 to 1.0).")
+    distance: float = Field(..., description="Vector distance score.")
+    source: str = Field(..., description="Originating document path or URL.")
+    page: str = Field(..., description="Page slug or record identifier.")
+    title: str = Field(..., description="Document or concept title.")
+    category: str = Field(default="general", description="Concept category.")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Full chunk metadata attributes.")
+
+
+class SemanticSearchResponse(BaseModel):
+    """Schema for semantic vector search response."""
+
+    query: str = Field(..., description="The original search query.")
+    total_results: int = Field(..., description="Number of retrieved chunks.")
+    results: List[SemanticSearchResult] = Field(default_factory=list, description="Ranked relevant chunks.")
+
+
 class HealthResponse(BaseModel):
     """Schema for API health status."""
 
@@ -117,6 +155,7 @@ def root() -> Dict[str, str]:
         "docs_url": "/docs",
         "health_url": "/health",
         "search_url": "/search?q=pod",
+        "semantic_search_url": "/search/semantic?q=pod",
         "chat_url": "/chat",
     }
 
@@ -175,8 +214,92 @@ def search_records(
         return []
 
     records = load_records()
+    from app.smart_search import smart_search
     results = smart_search(cleaned, records=records, top_k=3)
     return results
+
+
+@app.get(
+    "/search/semantic",
+    response_model=SemanticSearchResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Search"],
+)
+async def search_semantic_endpoint(
+    q: str = Query(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Search query to match against chunked documents using dense semantic embeddings.",
+    ),
+    limit: int = Query(
+        default=3,
+        ge=1,
+        le=20,
+        description="Maximum number of relevant chunks to retrieve.",
+    ),
+    category: Optional[str] = Query(
+        default=None,
+        description="Optional category filter (e.g. 'workload', 'networking', 'storage').",
+    ),
+) -> SemanticSearchResponse:
+    """Perform dense semantic vector search across persistent ChromaDB storage."""
+    cleaned = q.strip()
+    if not cleaned:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Search query cannot be empty or whitespace only.",
+        )
+
+    try:
+        from app.vectorstore import VectorStoreError, get_vector_store
+
+        store = get_vector_store()
+        # If vector store is empty, trigger initial indexing
+        if store.count() == 0:
+            logger.info("ChromaDB vector store is empty; running initial document indexing...")
+            store.index_documents()
+
+        category_filter = category.strip() if isinstance(category, str) and category.strip() else None
+
+        raw_results = store.query_similar(
+            query_text=cleaned,
+            n_results=limit,
+            category=category_filter,
+        )
+
+        formatted = [
+            SemanticSearchResult(
+                chunk_id=r["chunk_id"],
+                text=r["text"],
+                similarity=r["similarity"],
+                distance=r["distance"],
+                source=r["source"],
+                page=r["page"],
+                title=r["title"],
+                category=r.get("category", "general"),
+                metadata=r.get("metadata", {}),
+            )
+            for r in raw_results
+        ]
+
+        return SemanticSearchResponse(
+            query=cleaned,
+            total_results=len(formatted),
+            results=formatted,
+        )
+    except VectorStoreError as vs_err:
+        logger.error("Vector store error during semantic search: %s", vs_err)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Semantic search service unavailable: {vs_err}",
+        )
+    except Exception as exc:
+        logger.exception("Unexpected error in /search/semantic: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal server error occurred during semantic search.",
+        )
 
 
 @app.post(

@@ -117,6 +117,48 @@ Official Kubernetes documentation is extensive and technically dense. Beginners 
 - **Comprehensive Test Suite ([`tests/test_day06.py`](tests/test_day06.py)):**
   - Added 13 automated unit tests covering provider initialization, structured JSON parsing, mock responses, prompt file existence, `/chat` endpoint status codes, validation errors, and endpoint regression tests. Total test suite now runs **47 passing tests**.
 
+## Day 7 Progress — Dense Embeddings & ChromaDB Semantic Search
+- **Document Chunking Engine ([`app/chunking.py`](app/chunking.py)):**
+  - Developed a specialized documentation chunker for Kubernetes Markdown concepts and JSON records.
+  - Configurable sliding-window token/word chunking (`chunk_size=400`, `chunk_overlap=80` words) ensuring semantic continuity across chunk boundaries.
+  - Cleans raw Hugo shortcodes (`{{< ... >}}`), HTML comments, and formatting markers while preserving code blocks and command explanations.
+  - Generates deterministic, traceable chunk IDs (`doc:pod:chunk:001`, `record:pod:chunk:001`) with rich metadata preservation (`source`, `page`, `title`, `category`, `h2_section`).
+  - Chunks the entire knowledge base (18 structured records + 6 raw official Kubernetes concept documents: `pods.md`, `deployment.md`, `service.md`, `ingress.md`, `configmap.md`, `namespaces.md`) into **435 indexed chunks**.
+- **Dense Vector Embeddings ([`app/embed.py`](app/embed.py)):**
+  - Integrated `sentence-transformers` utilizing the pretrained `all-MiniLM-L6-v2` bi-encoder model, mapping text to dense 384-dimensional vector space ($\mathbb{R}^{384}$).
+  - Built a lazy-loaded singleton embedding manager (`EmbeddingProvider`) supporting high-throughput batch encoding (`embed_texts`) and single-query encoding (`embed_query`).
+  - Implemented an offline deterministic `MockEmbeddingProvider` utilizing SHA-256 seed hashing to produce normalized 384-dimensional vectors for lightning-fast, zero-network unit testing and CI/CD pipelines.
+- **Persistent ChromaDB Vector Store ([`app/vectorstore.py`](app/vectorstore.py)):**
+  - Implemented local persistent vector storage via `chromadb.PersistentClient` rooted in `data/chroma_db/`.
+  - Configured collection metadata with Cosine space (`hnsw:space="cosine"`) and atomic disk synchronization (`hnsw:sync_threshold=50`) guaranteeing complete HNSW index file persistence across process restarts.
+  - Built idempotent batch upsert (`add_chunks`) with automatic deduplication preventing duplicate vector entries on repeated ingest runs.
+  - Implemented `query_similar` supporting top-$k$ nearest neighbor retrieval, metadata filtering (`category`, `source`), and cosine distance to similarity score conversion: $\text{similarity} = 1.0 - (\text{cosine\_distance} / 2.0)$.
+- **Semantic Search API Endpoint (`GET /search/semantic` in [`app/main.py`](app/main.py)):**
+  - Added REST endpoint `GET /search/semantic?q={query}&limit={limit}&category={category}` returning validated `SemanticSearchResponse` with list of `SemanticSearchResult` objects.
+  - Resolved low-level Windows OpenMP runtime collision between MSVC OpenMP (`vcomp140.dll` used by `chroma-hnswlib`) and LLVM OpenMP (`libomp140.x86_64.dll` used by `scikit-learn`) through top-level initialization and lazy module loading.
+  - Validates queries ($3 \le \text{length} \le 500$), validates limit ($1 \le \text{limit} \le 20$), and supports optional category filtering.
+- **Systematic Evaluation Benchmark ([`eval/search_results.md`](eval/search_results.md)):**
+  - Ran all 10 benchmark questions from `eval/questions.json` through both **Semantic Search (Dense MiniLM + ChromaDB)** and **Smart Search (Sparse TF-IDF + Cosine Similarity)**.
+  - Recorded genuine scores, top retrieved chunks, and qualitative behavioral comparisons:
+    - **Semantic Search Strengths:** Understands synonyms, conceptual phrasing, and conversational queries (e.g., Q1 "crashloopbackoff" surfaces troubleshooting chunks, Q3 "exposing deployment externally" surfaces Ingress/Service routing concepts, Q8 "config and sensitive data" correctly links to ConfigMap and Secret boundaries).
+    - **TF-IDF Search Strengths:** Superior for exact lexical keyword lookups and literal command flags (e.g., exact `kubectl port-forward` string matching).
+    - **Out-of-Scope Detection (Q6 Istio mTLS):** Semantic search returned low similarity scores against core concepts, providing the mathematical grounding threshold necessary for Day 8 RAG hallucination guardrails.
+- **Semantic Search Architecture Flow:**
+  ```mermaid
+  flowchart TD
+    A["Official Documentation<br/>(data/raw/*.md, data/records.json)"] --> B["Document Chunking Engine<br/>(app/chunking.py)<br/>chunk_size=400, overlap=80"]
+    B --> C["435 Document Chunks<br/>(Text + Metadata + Stable IDs)"]
+    C --> D["Dense Vector Embeddings<br/>(app/embed.py)<br/>all-MiniLM-L6-v2 (384 dims)"]
+    D --> E["Persistent ChromaDB Store<br/>(data/chroma_db)<br/>HNSW Cosine Index"]
+    F["User Query<br/>(GET /search/semantic?q=...)"] --> G["Query Embedding<br/>(app/embed.py)"]
+    G --> H["k-NN Similarity Search<br/>(app/vectorstore.py)"]
+    E --> H
+    H --> I["Ranked Top Chunks<br/>(Cosine Similarity + Metadata)"]
+  ```
+- **Comprehensive Test Suite ([`tests/test_day07.py`](tests/test_day07.py)):**
+  - Added 16 automated unit tests validating chunk size boundaries, sliding overlap, metadata preservation, embedding dimensions and normalization, ChromaDB persistent deduplication, category filtering, and FastAPI endpoint response contracts.
+  - Project test suite now totals **63 passing unit tests** across Days 3, 4, 6, and 7.
+
 ---
 
 ## Repository Structure
@@ -125,14 +167,17 @@ Official Kubernetes documentation is extensive and technically dense. Beginners 
 GenAI/
 ├── app/
 │   ├── __init__.py
+│   ├── chunking.py          # Day 7: Document chunking engine for docs & records
 │   ├── cli.py               # Day 2: Interactive CLI explorer
+│   ├── embed.py             # Day 7: Dense vector embeddings (all-MiniLM-L6-v2 & Mock)
 │   ├── fetch.py             # Day 3: Official Kubernetes docs HTTP fetcher
 │   ├── ingest.py            # Day 3: Markdown parsing and JSON ingestion pipeline
 │   ├── llm.py               # Day 6: Unified LLM provider wrapper (Groq, Gemini, Mock)
-│   ├── main.py              # Day 4/6: FastAPI REST API backend & /chat endpoint
+│   ├── main.py              # Day 4/6/7: FastAPI REST backend, /chat & /search/semantic
 │   ├── models.py            # Day 3: Record dataclass and custom exception types
 │   ├── records.py           # Day 2/3: Record loading and querying functions
-│   └── smart_search.py      # Day 4: TF-IDF vectorization & Cosine Similarity search
+│   ├── smart_search.py      # Day 4: TF-IDF vectorization & Cosine Similarity search
+│   └── vectorstore.py       # Day 7: Persistent ChromaDB vector database manager
 ├── analysis/
 │   ├── __init__.py
 │   └── explore.py           # Day 4: Pandas data exploration and insights
@@ -147,7 +192,8 @@ GenAI/
 │   └── checkpoint_1.md      # Day 5: Checkpoint 1 review & viva preparation guide
 ├── eval/
 │   ├── prompt_compare.md    # Day 6: Systematic Prompt A vs. Prompt B comparison
-│   └── questions.json       # Day 5: 10 real user evaluation questions (with Q6 unanswerable)
+│   ├── questions.json       # Day 5: 10 real user evaluation questions (with Q6 unanswerable)
+│   └── search_results.md    # Day 7: Semantic Search vs. TF-IDF benchmark comparison
 ├── prompts/
 │   ├── explain_concept.md   # Day 6: Structured concept explanation prompt template
 │   ├── kubectl_helper.md    # Day 6: Practical kubectl command helper prompt template
@@ -156,11 +202,12 @@ GenAI/
 │   ├── __init__.py
 │   ├── test_day03.py        # Day 3 test suite (16 tests)
 │   ├── test_day04.py        # Day 4 test suite (18 tests)
-│   └── test_day06.py        # Day 6 test suite (13 tests)
+│   ├── test_day06.py        # Day 6 test suite (13 tests)
+│   └── test_day07.py        # Day 7 test suite (16 tests)
 ├── .env.example             # Day 6: Environment configuration template
 ├── day01_intro.py           # Day 1 introduction script
 ├── day01_menu.py            # Day 1 menu script
-├── requirements.txt         # Project dependencies (FastAPI, Groq, Pandas, etc.)
+├── requirements.txt         # Project dependencies (FastAPI, Groq, ChromaDB, etc.)
 ├── README.md                # Documentation
 └── .gitignore
 ```
@@ -176,6 +223,7 @@ GenAI/
 | `GET` | `/records?limit=` | List all records, optionally limited (`1 <= limit <= 100`) | `200 OK`, `422 Unprocessable` |
 | `GET` | `/records/{record_id}` | Retrieve single Kubernetes concept by ID | `200 OK`, `404 Not Found` |
 | `GET` | `/search?q=` | Smart TF-IDF search ranking top 3 relevant concepts | `200 OK` |
+| `GET` | `/search/semantic?q=&limit=&category=` | Dense vector semantic search using ChromaDB and Sentence Transformers | `200 OK`, `422 Unprocessable` |
 | `POST` | `/questions` | Submit a student question; appends to `data/questions.json` | `201 Created`, `422 Unprocessable` |
 | `POST` | `/chat` | Chat with KubeCoach LLM assistant; returns structured JSON | `200 OK`, `422 Unprocessable`, `429 Too Many Requests`, `502 Bad Gateway`, `503 Unavailable`, `504 Gateway Timeout` |
 
@@ -194,7 +242,7 @@ python -m venv .venv
 # Windows PowerShell:
 .\.venv\Scripts\Activate.ps1
 
-# Install dependencies (requests, fastapi, uvicorn, pydantic, pandas, scikit-learn, httpx, python-dotenv, groq)
+# Install dependencies (requests, fastapi, uvicorn, pydantic, pandas, scikit-learn, httpx, python-dotenv, groq, chromadb, sentence-transformers)
 python -m pip install -r requirements.txt
 ```
 
@@ -232,8 +280,11 @@ curl -X GET "http://127.0.0.1:8000/records?limit=3"
 # Get record by ID
 curl -X GET http://127.0.0.1:8000/records/pod
 
-# Smart TF-IDF search
+# Smart TF-IDF search (lexical/keyword)
 curl -X GET "http://127.0.0.1:8000/search?q=how+to+rollout+deployments"
+
+# Semantic vector search (Day 7: dense embedding search via ChromaDB)
+curl -X GET "http://127.0.0.1:8000/search/semantic?q=pod+is+crashing+repeatedly&limit=3"
 
 # Submit a student question
 curl -X POST http://127.0.0.1:8000/questions \
@@ -244,6 +295,27 @@ curl -X POST http://127.0.0.1:8000/questions \
 curl -X POST http://127.0.0.1:8000/chat \
      -H "Content-Type: application/json" \
      -d '{"query": "What is a Pod and how do I list running pods?"}'
+```
+
+Example JSON response from `GET /search/semantic`:
+```json
+{
+  "query": "pod is crashing repeatedly",
+  "total_results": 3,
+  "category_filter": null,
+  "results": [
+    {
+      "id": "doc:pods:chunk:012",
+      "text": "Container restart policy\n\nThe spec of a Pod has a restartPolicy field with possible values Always, OnFailure, and Never. The default value is Always.\n\nThe restartPolicy applies to all containers in the Pod. restartPolicy only refers to restarts of the containers by the kubelet on the same node.",
+      "distance": 0.4907,
+      "similarity": 0.7547,
+      "source": "official_k8s_docs",
+      "page": "pods.md",
+      "title": "Pods",
+      "category": "Workloads"
+    }
+  ]
+}
 ```
 
 Example JSON response from `POST /chat`:
@@ -270,14 +342,21 @@ python -m analysis.explore
 python -m app.smart_search
 ```
 
-### 7. Run Complete Test Suite (Days 3, 4 & 6)
+### 7. Run Document Chunking & ChromaDB Vector Indexer
+
+```bash
+# Ingest official documentation and records into persistent ChromaDB
+python -m app.vectorstore
+```
+
+### 8. Run Complete Test Suite (Days 3, 4, 6 & 7)
 
 ```bash
 python -m unittest discover tests -v
 ```
-*(Runs all 47 automated unit tests across models, ingestion, REST endpoints, smart search, and LLM providers)*
+*(Runs all 63 automated unit tests across models, ingestion, REST endpoints, smart search, LLM providers, chunking, embeddings, ChromaDB, and semantic search)*
 
-### 7. Run Earlier Day Modules
+### 9. Run Earlier Day Modules
 
 ```bash
 # Day 1
