@@ -219,6 +219,66 @@ Official Kubernetes documentation is extensive and technically dense. Beginners 
   - Added 16 automated unit tests validating RAG execution, citation deduplication, context sufficiency checks, Q6 refusal, empty query handling, `POST /ask` contract/422 validations, and endpoint regression.
   - Project test suite now totals **79 passing unit tests** across Days 3, 4, 6, 7, and 8.
 
+## Day 9 Progress — AI Agents, Tool Calling & LangGraph Workflow
+- **Assigned Developer Tool Identification ([`app/tools.py`](app/tools.py)):**
+  - Discovered project-card assigned tool for **SJ-58 (Developer Tools theme)**: `k8s_quantity_converter`.
+  - Converts Kubernetes CPU quantities (millicores `500m` $\leftrightarrow$ `0.5` cores) and Memory quantities (binary SI `Ki`, `Mi`, `Gi`, `Ti`; decimal SI `K`, `M`, `G`; plain bytes) into normalized canonical values and human-readable explanations.
+  - Implements strict validation and safety bounds: rejects negative numbers, malformed syntax, and quantities exceeding cluster bounds ($> 10,000,000$ cores or $> 10^{18}$ bytes).
+- **Safe Read-Only Tool Registry & Dispatcher:**
+  - Registered two read-only tools:
+    1. `k8s_rag_search`: Retrieval-Augmented Generation over official Kubernetes docs with citation tracking and confidence scoring.
+    2. `k8s_quantity_converter`: Resource quantity converter for CPU and memory specs.
+  - Defined OpenAI/LangChain-compatible structured schemas (`TOOL_SCHEMAS`) specifying parameters, types, and descriptions.
+  - Implemented safe dispatcher `execute_tool(name, arguments)` enforcing schema validation, required arguments, and isolated exception handling.
+- **Autonomous Agent Loop ([`app/agent_loop.py`](app/agent_loop.py)):**
+  - Built an educational ReAct-style agent loop: User Query $\rightarrow$ Reasoning Planner $\rightarrow$ Tool Action $\rightarrow$ Observation Recording $\rightarrow$ Final Synthesis.
+  - Added loop iteration guard (`max_iterations=5`) strictly preventing infinite cycles.
+  - Preserves official citations from RAG tool and synthesizes multi-part responses when queries involve multiple steps.
+- **LangGraph Stateful Workflow ([`app/graph.py`](app/graph.py)):**
+  - Modeled state with `AgentState` TypedDict: `messages`, `current_step`, `tool_calls`, `tool_results`, `citations`, `pending_tool`, `approval_required`, `approved`, `final_answer`, `session_id`.
+  - Structured Graph Nodes:
+    - `reasoner`: Evaluates user query and prior conversation history to select appropriate tools or prepare direct answers.
+    - `approval_gate`: Enforces Human-in-the-Loop (HITL) gate for sensitive operations (`k8s_quantity_converter`), requiring explicit human confirmation before execution.
+    - `tool_executor`: Safely executes approved tools via the tool dispatcher.
+    - `synthesizer`: Aggregates observations and produces grounded responses with official citations.
+  - Conditional Edges & Routing:
+    - Dynamic routing from `reasoner` to `approval_gate` or `synthesizer`.
+    - Conditional routing from `approval_gate`: pauses workflow if approval is pending, terminates if rejected, and forwards to `tool_executor` if approved.
+  - Conversational Session Memory: In-memory session checkpointer store keyed by `session_id`, retaining state across turns so approvals can be submitted asynchronously.
+- **Agent Workflow Diagram:**
+  ```mermaid
+  flowchart TD
+    A["User Request<br/>(POST /agent)"] --> B["Reasoner Node<br/>(Analyze query & history)"]
+    B -- "Tool Required" --> C{"Approval Gate<br/>(HITL Check)"}
+    B -- "Direct Answer" --> D["Synthesizer Node<br/>(Generate Response)"]
+    C -- "Safe Tool (k8s_rag_search)" --> E["Tool Executor Node<br/>(Safe Dispatcher)"]
+    C -- "k8s_quantity_converter<br/>(approved=None)" --> F["Pause Execution<br/>approval_required=True"]
+    C -- "k8s_quantity_converter<br/>(approved=False)" --> G["Rejection Handler<br/>approval_status='rejected'"]
+    C -- "k8s_quantity_converter<br/>(approved=True)" --> E
+    E --> D
+    D --> H["Final Output<br/>Answer + Citations + State"]
+    F --> H
+    G --> H
+  ```
+- **FastAPI Agent Endpoint (`POST /agent` in [`app/main.py`](app/main.py)):**
+  - Accepts `AgentRequest` (`question: str`, optional `session_id: str`, optional `approved: bool`).
+  - Returns `AgentResponse` (`question`, `answer`, `tool_calls`, `citations`, `session_id`, `approval_required`, `approval_status`, `pending_tool`).
+  - Updated root endpoint `GET /` to expose `"agent_url": "/agent"`.
+- **Comprehensive Test Suite ([`tests/test_day09.py`](tests/test_day09.py)):**
+  - Added 23 automated tests covering all 10 required Day 9 scenarios:
+    1. RAG question triggers RAG search tool
+    2. Quantity question triggers converter tool
+    3. Multi-part question triggers both tools
+    4. Invalid tool name handling
+    5. Invalid tool arguments handling
+    6. Tool execution failure handling
+    7. Human approval requested when converter tool selected
+    8. Human approval rejection stops execution cleanly
+    9. Conversation memory retains context across multiple turns
+    10. Iteration limit prevents infinite loops
+    Plus FastAPI `/agent` endpoint contracts and schema inspection.
+  - Project test suite now totals **102 passing unit tests** across Days 3, 4, 6, 7, 8, and 9!
+
 ---
 
 ## Repository Structure
@@ -294,6 +354,7 @@ GenAI/
 | `POST` | `/questions` | Submit a student question; appends to `data/questions.json` | `201 Created`, `422 Unprocessable` |
 | `POST` | `/chat` | Chat with KubeCoach LLM assistant; returns structured JSON | `200 OK`, `422 Unprocessable`, `429 Too Many Requests`, `502 Bad Gateway`, `503 Unavailable`, `504 Gateway Timeout` |
 | `POST` | `/ask` | Grounded RAG question answering with verified citations and honest refusal guardrail | `200 OK`, `422 Unprocessable`, `429 Too Many Requests`, `502 Bad Gateway`, `503 Unavailable`, `504 Gateway Timeout` |
+| `POST` | `/agent` | Autonomous AI Agent workflow with LangGraph, RAG documentation retrieval, and HITL approval gate | `200 OK`, `422 Unprocessable`, `500 Internal Error` |
 
 ---
 
@@ -416,7 +477,52 @@ Example JSON refusal response from `POST /ask` on out-of-scope question Q6:
 }
 ```
 
-### 5. Run Day 8 Multi-Configuration RAG Evaluation Benchmark
+#### Test AI Agent Endpoint (`POST /agent`) with cURL:
+
+**Scenario A — Grounded RAG Documentation Search (Autonomous Execution):**
+```bash
+curl -X POST http://localhost:8000/agent \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is a Pod and what command lists pods?"}'
+```
+
+**Scenario B — Human-in-the-Loop (HITL) Quantity Converter Lifecycle:**
+
+Step 1: Request conversion (workflow pauses at approval gate):
+```bash
+curl -X POST http://localhost:8000/agent \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Convert 500m CPU to cores"}'
+```
+*Response returns `"approval_required": true`, `"approval_status": "pending"`, and a `"session_id"`.*
+
+Step 2: Submit human approval to proceed with execution:
+```bash
+curl -X POST http://localhost:8000/agent \
+  -H "Content-Type: application/json" \
+  -d '{"question": "proceed", "session_id": "<SESSION_ID>", "approved": true}'
+```
+*Response executes tool and returns `"0.5 core(s) (500 millicores)"` with `"approval_status": "approved"`.*
+
+Step 3: Reject execution (optional rejection path):
+```bash
+curl -X POST http://localhost:8000/agent \
+  -H "Content-Type: application/json" \
+  -d '{"question": "cancel", "session_id": "<SESSION_ID>", "approved": false}'
+```
+*Response aborts tool execution cleanly with `"approval_status": "rejected"`.*
+
+### 5. Run Day 9 Agent Loop & LangGraph Workflow CLI
+
+```bash
+# Run educational agent loop
+python -m app.agent_loop
+
+# Run stateful LangGraph agent
+python -m app.graph
+```
+
+### 6. Run Day 8 Multi-Configuration RAG Evaluation Benchmark
 
 ```bash
 # Evaluates Configuration A vs. Configuration B across all 15 questions in eval/eval_set.json
@@ -435,21 +541,21 @@ python -m analysis.explore
 python -m app.smart_search
 ```
 
-### 8. Run Document Chunking & ChromaDB Vector Indexer
+### 9. Run Document Chunking & ChromaDB Vector Indexer
 
 ```bash
 # Ingest official documentation and records into persistent ChromaDB
 python -m app.vectorstore
 ```
 
-### 9. Run Complete Test Suite (Days 3, 4, 6, 7 & 8)
+### 10. Run Complete Test Suite (Days 3, 4, 6, 7, 8 & 9)
 
 ```bash
 python -m unittest discover tests -v
 ```
-*(Runs all 79 automated unit tests across models, ingestion, REST endpoints, smart search, LLM providers, chunking, embeddings, ChromaDB, and RAG pipeline)*
+*(Runs all 102 automated unit tests across models, ingestion, REST endpoints, smart search, LLM providers, chunking, embeddings, ChromaDB, RAG pipeline, agent tools, loop, and LangGraph workflow)*
 
-### 10. Run Earlier Day Modules
+### 11. Run Earlier Day Modules
 
 ```bash
 # Day 1

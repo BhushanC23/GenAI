@@ -186,6 +186,42 @@ class AskResponse(BaseModel):
     context_sufficient: bool = Field(..., description="Whether retrieved context was sufficient to answer.")
 
 
+class AgentRequest(BaseModel):
+    """Schema for incoming AI Agent request."""
+
+    question: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        description="The Kubernetes inquiry, kubectl command, or quantity conversion request.",
+        example="Convert 500m CPU to cores",
+    )
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Optional persistent session identifier for multi-turn conversation memory.",
+        example="sess-a1b2c3d4",
+    )
+    approved: Optional[bool] = Field(
+        default=None,
+        description="Approval status (True/False/None) for operations requiring human-in-the-loop verification.",
+        example=True,
+    )
+
+
+class AgentResponse(BaseModel):
+    """Schema for AI Agent execution response."""
+
+    question: str = Field(..., description="The user question or request.")
+    answer: str = Field(..., description="Synthesized answer or approval request message.")
+    tool_calls: List[Dict[str, Any]] = Field(default_factory=list, description="List of tools invoked or pending.")
+    citations: List[Dict[str, Any]] = Field(default_factory=list, description="Official documentation citations.")
+    session_id: str = Field(..., description="Session identifier for continuing the conversation.")
+    approval_required: bool = Field(..., description="Whether execution is paused awaiting human approval.")
+    approval_status: Optional[str] = Field(default=None, description="Current approval status: pending, approved, or rejected.")
+    pending_tool: Optional[Dict[str, Any]] = Field(default=None, description="Details of tool awaiting approval.")
+    success: bool = Field(default=True, description="Whether the request succeeded.")
+
+
 @app.get("/", tags=["General"])
 def root() -> Dict[str, str]:
     """Root welcome endpoint providing links to documentation."""
@@ -197,6 +233,7 @@ def root() -> Dict[str, str]:
         "semantic_search_url": "/search/semantic?q=pod",
         "chat_url": "/chat",
         "ask_url": "/ask",
+        "agent_url": "/agent",
     }
 
 
@@ -541,3 +578,59 @@ def ask_kubecoach_rag(payload: AskRequest) -> AskResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal server error occurred while processing RAG request.",
         )
+
+
+@app.post(
+    "/agent",
+    response_model=AgentResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Agent"],
+)
+def run_kubecoach_agent_endpoint(payload: AgentRequest) -> AgentResponse:
+    """Execute the KubeCoach autonomous agent workflow with LangGraph.
+
+    Supports autonomous tool execution (RAG documentation search), human-in-the-loop
+    approval for quantity conversions, and conversational session memory.
+    """
+    question_text = payload.question.strip()
+    if not question_text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Question cannot be empty or whitespace only.",
+        )
+
+    logger.info(
+        "Agent request received: '%s' (session_id=%s, approved=%s)",
+        question_text,
+        payload.session_id,
+        payload.approved,
+    )
+
+    try:
+        from app.graph import run_agent
+
+        result = run_agent(
+            question=question_text,
+            session_id=payload.session_id,
+            approved=payload.approved,
+        )
+
+        return AgentResponse(
+            question=result.get("question", question_text),
+            answer=result.get("answer", ""),
+            tool_calls=result.get("tool_calls", []),
+            citations=result.get("citations", []),
+            session_id=result.get("session_id", ""),
+            approval_required=result.get("approval_required", False),
+            approval_status=result.get("approval_status"),
+            pending_tool=result.get("pending_tool"),
+            success=result.get("success", True),
+        )
+
+    except Exception as exc:
+        logger.exception("Error executing /agent endpoint: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error executing agent workflow: {exc}",
+        )
+
