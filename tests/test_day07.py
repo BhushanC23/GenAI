@@ -6,9 +6,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-# Enable mock embeddings for ultra-fast, deterministic unit test execution
-os.environ["KUBECOACH_MOCK_EMBEDDINGS"] = "1"
-
 from fastapi.testclient import TestClient
 
 from app.chunking import (
@@ -134,7 +131,7 @@ class TestEmbeddings(unittest.TestCase):
             self.assertEqual(len(vec), EMBEDDING_DIMENSION)
 
     def test_empty_query_embedding(self) -> None:
-        provider = get_embedding_provider(force_mock=True)
+        provider = MockEmbeddingProvider()
         zero_vec = provider.embed_query("")
         self.assertEqual(len(zero_vec), EMBEDDING_DIMENSION)
         self.assertEqual(sum(zero_vec), 0.0)

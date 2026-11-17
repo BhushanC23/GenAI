@@ -147,6 +147,45 @@ class HealthResponse(BaseModel):
     records_count: int
 
 
+class CitationItem(BaseModel):
+    """Schema for a documentation source citation."""
+
+    document_title: str = Field(..., description="Title of the cited Kubernetes document or concept.")
+    source_url: str = Field(..., description="Official documentation source URL.")
+    page: str = Field(..., description="Document page or source file.")
+    chunk_id: Optional[str] = Field(default=None, description="Optional chunk identifier.")
+
+
+class AskRequest(BaseModel):
+    """Schema for incoming RAG question request."""
+
+    question: str = Field(
+        ...,
+        min_length=3,
+        max_length=1000,
+        description="The Kubernetes question to answer using grounded RAG.",
+        example="What is a Pod and what command lists running pods?",
+    )
+    top_k: Optional[int] = Field(
+        default=3,
+        ge=1,
+        le=20,
+        description="Number of relevant document chunks to retrieve.",
+        example=3,
+    )
+
+
+class AskResponse(BaseModel):
+    """Schema for grounded RAG response with citations and retrieved chunks."""
+
+    question: str = Field(..., description="The original student question.")
+    answer: str = Field(..., description="Grounded plain-English explanation.")
+    citations: List[CitationItem] = Field(default_factory=list, description="Verified documentation citations.")
+    retrieved_chunks: List[Dict[str, Any]] = Field(default_factory=list, description="Raw chunks retrieved from vector store.")
+    confidence: str = Field(..., description="Confidence level: high, medium, or low.")
+    context_sufficient: bool = Field(..., description="Whether retrieved context was sufficient to answer.")
+
+
 @app.get("/", tags=["General"])
 def root() -> Dict[str, str]:
     """Root welcome endpoint providing links to documentation."""
@@ -157,6 +196,7 @@ def root() -> Dict[str, str]:
         "search_url": "/search?q=pod",
         "semantic_search_url": "/search/semantic?q=pod",
         "chat_url": "/chat",
+        "ask_url": "/ask",
     }
 
 
@@ -407,4 +447,97 @@ def chat_with_kubecoach(payload: ChatRequest) -> ChatResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal server error occurred while generating response.",
+        )
+
+
+@app.post(
+    "/ask",
+    response_model=AskResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["RAG"],
+)
+def ask_kubecoach_rag(payload: AskRequest) -> AskResponse:
+    """Answer a Kubernetes question using Retrieval-Augmented Generation with citations.
+
+    Retrieves top-k documentation chunks from persistent ChromaDB, evaluates context
+    sufficiency, and generates a grounded response with official citations.
+    """
+    question_text = payload.question.strip()
+    if not question_text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Question cannot be empty or whitespace only.",
+        )
+
+    top_k = payload.top_k if payload.top_k is not None else 3
+    if top_k < 1 or top_k > 20:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="top_k must be between 1 and 20.",
+        )
+
+    logger.info("RAG ask request received: '%s' (top_k=%d)", question_text, top_k)
+
+    try:
+        from app.rag import execute_rag_pipeline
+
+        rag_result = execute_rag_pipeline(
+            question=question_text,
+            top_k=top_k,
+        )
+
+        citation_items = [
+            CitationItem(
+                document_title=c.document_title,
+                source_url=c.source_url,
+                page=c.page,
+                chunk_id=c.chunk_id,
+            )
+            for c in rag_result.citations
+        ]
+
+        return AskResponse(
+            question=rag_result.question,
+            answer=rag_result.answer,
+            citations=citation_items,
+            retrieved_chunks=rag_result.retrieved_chunks,
+            confidence=rag_result.confidence,
+            context_sufficient=rag_result.context_sufficient,
+        )
+
+    except VectorStoreError as vs_err:
+        logger.error("Vector store error during /ask: %s", vs_err)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Vector search service unavailable: {vs_err}",
+        )
+    except LLMAuthenticationError as auth_err:
+        logger.error("LLM authentication failure during /ask: %s", auth_err)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"LLM authentication error: {auth_err}",
+        )
+    except LLMRateLimitError as rate_err:
+        logger.warning("LLM rate limit hit during /ask: %s", rate_err)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="LLM rate limit exceeded. Please wait a moment before trying again.",
+        )
+    except LLMTimeoutError as timeout_err:
+        logger.error("LLM timeout during /ask: %s", timeout_err)
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="LLM request timed out while generating RAG answer.",
+        )
+    except LLMError as llm_err:
+        logger.error("LLM provider error during /ask: %s", llm_err)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"LLM provider error: {llm_err}",
+        )
+    except Exception as exc:
+        logger.exception("Unexpected error in /ask endpoint: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal server error occurred while processing RAG request.",
         )

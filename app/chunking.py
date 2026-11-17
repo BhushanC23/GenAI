@@ -219,6 +219,7 @@ def chunk_record(
 
     meta = {
         "source": source,
+        "source_url": source,
         "page": rec_id,
         "title": title,
         "category": category,
@@ -276,23 +277,46 @@ def load_and_chunk_all_documents(
 
     # 2. Chunk raw official markdown files in data/raw
     if raw_dir.exists() and raw_dir.is_dir():
+        # Load manifest if available for official source URLs and categories
+        manifest_map: Dict[str, Dict[str, Any]] = {}
+        manifest_file = raw_dir / "manifest.json"
+        if manifest_file.exists():
+            try:
+                with open(manifest_file, "r", encoding="utf-8") as mf:
+                    manifest_list = json.load(mf)
+                for item in manifest_list:
+                    if isinstance(item, dict) and "filename" in item:
+                        manifest_map[item["filename"]] = item
+            except Exception as m_err:
+                logger.warning("Could not read manifest.json: %s", m_err)
+
         md_files = list(raw_dir.glob("*.md"))
         for md_path in md_files:
             try:
                 content = md_path.read_text(encoding="utf-8")
                 slug = md_path.stem.lower()
 
-                # Derive clean title from frontmatter or filename
-                title = slug.replace("-", " ").title()
-                for line in content.splitlines()[:15]:
-                    if line.startswith("title:"):
-                        title = line.replace("title:", "").strip().strip('"\'')
-                        break
+                manifest_entry = manifest_map.get(md_path.name, {})
+                source_url = manifest_entry.get(
+                    "source_url", f"https://kubernetes.io/docs/concepts/{slug}/"
+                )
+                category = manifest_entry.get("category", "general")
+
+                # Derive clean title from frontmatter, manifest or filename
+                title = manifest_entry.get("title")
+                if not title:
+                    title = slug.replace("-", " ").title()
+                    for line in content.splitlines()[:15]:
+                        if line.startswith("title:"):
+                            title = line.replace("title:", "").strip().strip('"\'')
+                            break
 
                 meta = {
                     "source": f"raw/{md_path.name}",
-                    "page": slug,
+                    "source_url": source_url,
+                    "page": md_path.name,
                     "title": title,
+                    "category": category,
                     "file_path": str(md_path),
                 }
 

@@ -1,0 +1,107 @@
+[
+  {
+    "id": "Q1",
+    "question": "What is a Pod?",
+    "expected_answer": "A Pod is the smallest deployable compute unit in Kubernetes that can be created and managed. It represents a single instance of a running process in your cluster, consisting of one or more containers that share storage, network IP, and specifications.",
+    "expected_sources": ["pods.md", "records.json"],
+    "is_answerable": true
+  },
+  {
+    "id": "Q2",
+    "question": "What is a Deployment?",
+    "expected_answer": "A Deployment provides declarative updates for Pods and ReplicaSets. You describe a desired state in a Deployment, and the Deployment Controller changes the actual state to the desired state at a controlled rate.",
+    "expected_sources": ["deployment.md", "records.json"],
+    "is_answerable": true
+  },
+  {
+    "id": "Q3",
+    "question": "What is a Kubernetes Service?",
+    "expected_answer": "A Service is an abstraction that defines a logical set of Pods and a policy by which to access them. It provides a stable IP address and DNS name so other workloads can communicate without tracking ephemeral pod IP addresses.",
+    "expected_sources": ["service.md", "records.json"],
+    "is_answerable": true
+  },
+  {
+    "id": "Q4",
+    "question": "How do I store sensitive credentials like passwords and API keys in Kubernetes?",
+    "expected_answer": "Use a Secret object. A Secret is designed to hold small amounts of sensitive confidential data such as passwords, tokens, or keys. By default, secret data is stored as base64-encoded strings, avoiding plain-text exposure in Pod specs.",
+    "expected_sources": ["records.json"],
+    "is_answerable": true
+  },
+  {
+    "id": "Q5",
+    "question": "How do I isolate resources and define team permissions within a single cluster?",
+    "expected_answer": "Use Namespaces to provide a mechanism for isolating groups of resources within a single cluster, combined with Role and RoleBinding objects in Role-Based Access Control (RBAC) to define and bind granular permissions to teams or service accounts.",
+    "expected_sources": ["namespaces.md", "records.json"],
+    "is_answerable": true
+  },
+  {
+    "id": "Q6",
+    "question": "How do I configure an Istio Service Mesh with Mutual TLS (mTLS) across multi-cluster deployments?",
+    "expected_answer": "I don't know based on the provided official Kubernetes documentation. Istio and third-party service meshes are not part of core Kubernetes objects and are outside the scope of the project documentation.",
+    "expected_sources": [],
+    "is_answerable": false
+  },
+  {
+    "id": "Q7",
+    "question": "How do I ensure a logging or monitoring pod runs on every single worker node in my cluster?",
+    "expected_answer": "Use a DaemonSet controller. A DaemonSet ensures that all (or some) nodes run a copy of a Pod. As nodes are added to the cluster, Pods are added to them, which is ideal for cluster-wide daemons like log collectors or monitoring agents.",
+    "expected_sources": ["records.json"],
+    "is_answerable": true
+  },
+  {
+    "id": "Q8",
+    "question": "What is the difference between a ConfigMap and a Secret for environment variables?",
+    "expected_answer": "ConfigMaps are used to store non-confidential key-value configuration data in plain text, whereas Secrets are specifically designed to hold sensitive confidential information like passwords, API keys, or certificates, storing data in base64 encoding with restricted RBAC access.",
+    "expected_sources": ["configmap.md", "records.json"],
+    "is_answerable": true
+  },
+  {
+    "id": "Q9",
+    "question": "How can an administrator restrict total CPU and memory consumption in a specific namespace?",
+    "expected_answer": "Configure a ResourceQuota object in that namespace. A ResourceQuota provides constraints that limit aggregate resource consumption (such as compute CPU/memory and total object counts) per Namespace to prevent one team or tenant from starving cluster resources.",
+    "expected_sources": ["records.json"],
+    "is_answerable": true
+  },
+  {
+    "id": "Q10",
+    "question": "What controller should I use for a stateful database that requires stable network identities and dedicated storage?",
+    "expected_answer": "Use a StatefulSet. A StatefulSet manages stateful applications and provides guarantees about the ordering and uniqueness of Pods, ensuring persistent volume bindings remain tied to specific ordinal identities across pod rescheduling.",
+    "expected_sources": ["records.json"],
+    "is_answerable": true
+  },
+  {
+    "id": "Q11",
+    "question": "What are the allowed values for a Pod restartPolicy and what is the default?",
+    "expected_answer": "The spec of a Pod has a restartPolicy field with possible values Always, OnFailure, and Never. The default value is Always, which restarts containers whenever they terminate.",
+    "expected_sources": ["pods.md"],
+    "is_answerable": true
+  },
+  {
+    "id": "Q12",
+    "question": "What is the difference between a ClusterIP and a NodePort Service?",
+    "expected_answer": "ClusterIP is the default Service type that exposes the Service on a cluster-internal IP address, reachable only within the cluster. NodePort exposes the Service on each Node's IP at a static port (in the range 30000-32767), allowing external traffic to reach the Service via NodeIP:NodePort.",
+    "expected_sources": ["service.md", "records.json"],
+    "is_answerable": true
+  },
+  {
+    "id": "Q13",
+    "question": "How does a Deployment perform a rolling update when the container image is updated?",
+    "expected_answer": "A Deployment updates Pods by creating a new ReplicaSet and gradually scaling it up while proportionally scaling down the old ReplicaSet. This process is governed by rollout strategies such as maxSurge and maxUnavailable to ensure zero-downtime transitions.",
+    "expected_sources": ["deployment.md", "records.json"],
+    "is_answerable": true
+  },
+  {
+    "id": "Q14",
+    "question": "What is an Ingress Controller and why is an Ingress resource alone not enough?",
+    "expected_answer": "An Ingress resource only contains routing rules and specifications. In order for the Ingress to work, an Ingress controller (such as ingress-nginx or an AWS ALB controller) must be running in the cluster to accept external traffic and route it according to the Ingress rules.",
+    "expected_sources": ["ingress.md", "records.json"],
+    "is_answerable": true
+  },
+  {
+    "id": "Q15",
+    "question": "What is the difference between a PersistentVolume (PV) and a PersistentVolumeClaim (PVC)?",
+    "expected_answer": "A PersistentVolume (PV) is a piece of storage in the cluster provisioned by an administrator or dynamically through StorageClasses. A PersistentVolumeClaim (PVC) is a request for storage by a user or workload that specifies size, access modes, and binds to a matching PersistentVolume.",
+    "expected_sources": ["records.json"],
+    "is_answerable": true
+  }
+]

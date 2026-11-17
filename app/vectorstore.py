@@ -251,6 +251,9 @@ class KubeCoachVectorStore:
                         "distance": round(dist, 4),
                         "similarity": similarity,
                         "source": meta.get("source", "unknown"),
+                        "source_url": meta.get(
+                            "source_url", meta.get("source", "https://kubernetes.io/docs/concepts/")
+                        ),
                         "page": meta.get("page", "unknown"),
                         "title": meta.get("title", meta.get("page", "unknown")),
                         "category": meta.get("category", "general"),

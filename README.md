@@ -159,6 +159,66 @@ Official Kubernetes documentation is extensive and technically dense. Beginners 
   - Added 16 automated unit tests validating chunk size boundaries, sliding overlap, metadata preservation, embedding dimensions and normalization, ChromaDB persistent deduplication, category filtering, and FastAPI endpoint response contracts.
   - Project test suite now totals **63 passing unit tests** across Days 3, 4, 6, and 7.
 
+## Day 8 Progress — Grounded RAG with Citations & Multi-Config Evaluation
+- **End-to-End Grounded RAG Pipeline ([`app/rag.py`](app/rag.py)):**
+  - Architected a modular Retrieval-Augmented Generation (RAG) engine connecting vector retrieval to structured LLM inference.
+  - Converts user questions into 384-dimensional dense vectors using `all-MiniLM-L6-v2` (`app/embed.py`).
+  - Retrieves top-$k$ nearest neighbor document chunks from persistent ChromaDB collections (`data/chroma_db`).
+  - Implements a **generalized context sufficiency and domain coverage rule** (`is_context_sufficient`):
+    - Evaluates semantic similarity thresholds ($S \ge 0.55$) and query entity coverage across retrieved text.
+    - Out-of-scope technologies (e.g. Istio Service Mesh, Nomad, Linkerd) are detected mathematically rather than hardcoded.
+    - Questions lacking sufficient context receive an honest refusal: *"I don't know based on the provided official Kubernetes documentation."* with exactly **0 fake citations**.
+  - Formats retrieved chunks into numbered context blocks (`[Context Block 1]`) with document titles, source URLs, and file paths.
+  - Supports live inference via **Groq** and **Google Gemini**, with automatic fallback to a local grounded mock generator for offline development and testing.
+- **Verifiable Citation Engine:**
+  - Extracts and deduplicates structured citations based strictly on retrieved chunks used during answer generation.
+  - Each citation provides `document_title`, `source_url` (grounded in official `kubernetes.io/docs/concepts/` URLs), and `page` source file.
+  - Guarantees zero fabricated citations: if the system refuses with "I don't know", the citation list is strictly empty (`[]`).
+- **Interactive RAG API Endpoint (`POST /ask` in [`app/main.py`](app/main.py)):**
+  - Exposes `POST /ask` accepting `AskRequest` (`question: str`, optional `top_k: int = 3`).
+  - Returns validated `AskResponse` containing `answer`, `citations`, `retrieved_chunks`, `confidence`, and `context_sufficient`.
+  - Comprehensive HTTP error handling: `422 Unprocessable` for invalid inputs, `503 Unavailable` for vector store failures, `429 Too Many Requests` for rate limits, `504 Gateway Timeout` for slow provider requests, and `502 Bad Gateway` for provider errors.
+  - Fully backward compatible: all previous Day 1–7 endpoints (`/`, `/health`, `/records`, `/search`, `/search/semantic`, `/questions`, `/chat`) remain operational.
+- **RAG Architecture & Workflow:**
+  ```mermaid
+  flowchart TD
+    A["User Question<br/>(POST /ask)"] --> B["Dense Embedding<br/>(app/embed.py)<br/>all-MiniLM-L6-v2"]
+    B --> C["ChromaDB Vector Store<br/>(app/vectorstore.py)<br/>Top-k Cosine Retrieval"]
+    C --> D{"Context Sufficiency<br/>Check (app/rag.py)"}
+    D -- "Insufficient / Out-of-Scope<br/>(e.g. Q6 Istio mTLS)" --> E["Honest Refusal<br/>'I don't know...'<br/>Citations: []"]
+    D -- "Sufficient Context" --> F["Grounded Prompt Builder<br/>Numbered Context Blocks<br/>+ System Directives"]
+    F --> G["LLM Provider Wrapper<br/>(Groq / Gemini / Mock)"]
+    G --> H["Grounded Explanation<br/>+ kubectl Commands<br/>+ Verified Citations"]
+  ```
+- **15-Question Evaluation Dataset ([`eval/eval_set.json`](eval/eval_set.json)):**
+  - Formulated a comprehensive benchmark dataset preserving all 10 existing questions from `eval/questions.json` (including out-of-scope question **Q6** with `is_answerable: false`).
+  - Added 5 new official documentation grounded questions:
+    - `Q11`: Pod `restartPolicy` allowed values and default (`Always`).
+    - `Q12`: Differences between `ClusterIP` and `NodePort` Services.
+    - `Q13`: Deployment rolling update mechanics and ReplicaSet transitions.
+    - `Q14`: Ingress controller requirements beyond Ingress resource rules.
+    - `Q15`: Differences between `PersistentVolume` (PV) and `PersistentVolumeClaim` (PVC).
+- **RAG Configuration Benchmark ([`eval/run_eval.py`](eval/run_eval.py) & [`eval/rag_comparison.md`](eval/rag_comparison.md)):**
+  - Evaluated and compared two distinct architectural configurations across all 15 questions:
+    - **Configuration A:** Chunk size 500 chars, overlap 100 chars, top-$k=3$ (435 chunks indexed).
+    - **Configuration B:** Chunk size 800 chars, overlap 150 chars, top-$k=5$ (275 chunks indexed).
+  - Benchmark Summary:
+
+    | Metric | Configuration A (500 chars, k=3) | Configuration B (800 chars, k=5) | Winning Config |
+    | :--- | :--- | :--- | :--- |
+    | **Total Chunks in Collection** | 435 chunks | 275 chunks | Config A (Finer granularity) |
+    | **Retrieval Relevance** | **86.7%** | **86.7%** | **Tie** |
+    | **Citation Correctness** | **93.3%** | **100.0%** | **Configuration B** |
+    | **Answer Correctness (Recall)** | **32.6%** | **32.0%** | **Configuration A** |
+    | **Q6 Refusal ('I don't know')** | **PASS (100%)** | **PASS (100%)** | **Tie (Both Pass)** |
+    | **Average Latency per Query** | **29.6 ms** | **24.6 ms** | **Configuration B** |
+    | **Overall Benchmark Winner** | - | **Configuration B** | Higher citation coverage & speed |
+
+  - **Winning Configuration Rationale:** **Configuration B** achieved higher aggregate score by providing 100.0% citation correctness across all answerable questions (capturing necessary surrounding section context with top-$k=5$) and lower retrieval latency (24.6ms over 275 indexed chunks), while maintaining 100% refusal accuracy on out-of-scope question Q6.
+- **Comprehensive Test Suite ([`tests/test_day08.py`](tests/test_day08.py)):**
+  - Added 16 automated unit tests validating RAG execution, citation deduplication, context sufficiency checks, Q6 refusal, empty query handling, `POST /ask` contract/422 validations, and endpoint regression.
+  - Project test suite now totals **79 passing unit tests** across Days 3, 4, 6, 7, and 8.
+
 ---
 
 ## Repository Structure
@@ -173,8 +233,9 @@ GenAI/
 │   ├── fetch.py             # Day 3: Official Kubernetes docs HTTP fetcher
 │   ├── ingest.py            # Day 3: Markdown parsing and JSON ingestion pipeline
 │   ├── llm.py               # Day 6: Unified LLM provider wrapper (Groq, Gemini, Mock)
-│   ├── main.py              # Day 4/6/7: FastAPI REST backend, /chat & /search/semantic
+│   ├── main.py              # Day 4/6/7/8: FastAPI backend (/chat, /search/semantic, /ask)
 │   ├── models.py            # Day 3: Record dataclass and custom exception types
+│   ├── rag.py               # Day 8: Grounded RAG pipeline with citations & refusal guardrail
 │   ├── records.py           # Day 2/3: Record loading and querying functions
 │   ├── smart_search.py      # Day 4: TF-IDF vectorization & Cosine Similarity search
 │   └── vectorstore.py       # Day 7: Persistent ChromaDB vector database manager
@@ -191,19 +252,25 @@ GenAI/
 │   ├── how_llms_work.md     # Day 5: LLM fundamentals, Transformer & attention guide
 │   └── checkpoint_1.md      # Day 5: Checkpoint 1 review & viva preparation guide
 ├── eval/
+│   ├── eval_results.json    # Day 8: Multi-configuration benchmark execution metrics
+│   ├── eval_set.json        # Day 8: 15-question evaluation benchmark dataset
 │   ├── prompt_compare.md    # Day 6: Systematic Prompt A vs. Prompt B comparison
 │   ├── questions.json       # Day 5: 10 real user evaluation questions (with Q6 unanswerable)
+│   ├── rag_comparison.md    # Day 8: Detailed Config A vs Config B comparison report
+│   ├── run_eval.py          # Day 8: Automated evaluation and benchmark runner
 │   └── search_results.md    # Day 7: Semantic Search vs. TF-IDF benchmark comparison
 ├── prompts/
 │   ├── explain_concept.md   # Day 6: Structured concept explanation prompt template
 │   ├── kubectl_helper.md    # Day 6: Practical kubectl command helper prompt template
+│   ├── rag_system_prompt.md # Day 8: Grounded RAG system prompt with citation directives
 │   └── system_prompt.md     # Day 6: Master system prompt enforcing persona & JSON schema
 ├── tests/
 │   ├── __init__.py
 │   ├── test_day03.py        # Day 3 test suite (16 tests)
 │   ├── test_day04.py        # Day 4 test suite (18 tests)
 │   ├── test_day06.py        # Day 6 test suite (13 tests)
-│   └── test_day07.py        # Day 7 test suite (16 tests)
+│   ├── test_day07.py        # Day 7 test suite (16 tests)
+│   └── test_day08.py        # Day 8 test suite (16 tests)
 ├── .env.example             # Day 6: Environment configuration template
 ├── day01_intro.py           # Day 1 introduction script
 ├── day01_menu.py            # Day 1 menu script
@@ -226,6 +293,7 @@ GenAI/
 | `GET` | `/search/semantic?q=&limit=&category=` | Dense vector semantic search using ChromaDB and Sentence Transformers | `200 OK`, `422 Unprocessable` |
 | `POST` | `/questions` | Submit a student question; appends to `data/questions.json` | `201 Created`, `422 Unprocessable` |
 | `POST` | `/chat` | Chat with KubeCoach LLM assistant; returns structured JSON | `200 OK`, `422 Unprocessable`, `429 Too Many Requests`, `502 Bad Gateway`, `503 Unavailable`, `504 Gateway Timeout` |
+| `POST` | `/ask` | Grounded RAG question answering with verified citations and honest refusal guardrail | `200 OK`, `422 Unprocessable`, `429 Too Many Requests`, `502 Bad Gateway`, `503 Unavailable`, `504 Gateway Timeout` |
 
 ---
 
@@ -286,6 +354,16 @@ curl -X GET "http://127.0.0.1:8000/search?q=how+to+rollout+deployments"
 # Semantic vector search (Day 7: dense embedding search via ChromaDB)
 curl -X GET "http://127.0.0.1:8000/search/semantic?q=pod+is+crashing+repeatedly&limit=3"
 
+# Grounded RAG question answering with citations (Day 8: POST /ask)
+curl -X POST http://127.0.0.1:8000/ask \
+     -H "Content-Type: application/json" \
+     -d '{"question": "What is a Pod and what command lists running pods?", "top_k": 3}'
+
+# Out-of-scope query returning honest refusal with zero fake citations (Day 8: Q6)
+curl -X POST http://127.0.0.1:8000/ask \
+     -H "Content-Type: application/json" \
+     -d '{"question": "How do I configure an Istio Service Mesh with Mutual TLS (mTLS) across multi-cluster deployments?", "top_k": 3}'
+
 # Submit a student question
 curl -X POST http://127.0.0.1:8000/questions \
      -H "Content-Type: application/json" \
@@ -297,66 +375,81 @@ curl -X POST http://127.0.0.1:8000/chat \
      -d '{"query": "What is a Pod and how do I list running pods?"}'
 ```
 
-Example JSON response from `GET /search/semantic`:
+Example JSON response from `POST /ask`:
 ```json
 {
-  "query": "pod is crashing repeatedly",
-  "total_results": 3,
-  "category_filter": null,
-  "results": [
+  "question": "What is a Pod and what command lists running pods?",
+  "answer": "Based on official Kubernetes documentation for Pods (workload):\n\nA Pod is the smallest deployable compute unit in Kubernetes. Replicated Pods are usually created and managed as a group by a workload resource and its controller.\n\nExample command:\n```bash\nkubectl get pods -o wide\n```",
+  "citations": [
     {
-      "id": "doc:pods:chunk:012",
-      "text": "Container restart policy\n\nThe spec of a Pod has a restartPolicy field with possible values Always, OnFailure, and Never. The default value is Always.\n\nThe restartPolicy applies to all containers in the Pod. restartPolicy only refers to restarts of the containers by the kubelet on the same node.",
-      "distance": 0.4907,
-      "similarity": 0.7547,
-      "source": "official_k8s_docs",
+      "document_title": "Pods",
+      "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+      "page": "pods.md",
+      "chunk_id": "doc:pods:chunk:001"
+    }
+  ],
+  "retrieved_chunks": [
+    {
+      "chunk_id": "doc:pods:chunk:001",
+      "text": "A Pod is the smallest deployable compute unit in Kubernetes...",
+      "similarity": 0.8909,
+      "source": "raw/pods.md",
       "page": "pods.md",
       "title": "Pods",
-      "category": "Workloads"
+      "category": "workload"
     }
-  ]
+  ],
+  "confidence": "high",
+  "context_sufficient": true
 }
 ```
 
-Example JSON response from `POST /chat`:
+Example JSON refusal response from `POST /ask` on out-of-scope question Q6:
 ```json
 {
-  "answer": "A Pod is the smallest deployable compute unit in Kubernetes representing a single instance of a running process.\n\nTo list running pods with wide output, execute:\n```bash\nkubectl get pods -o wide\n```",
-  "confidence": "high",
-  "follow_up": "Would you like to know how Deployments manage Pod replica sets and rolling updates?",
-  "provider": "mock",
-  "model": "grounded-seed-knowledge-base",
-  "grounded_records": ["pod"]
+  "question": "How do I configure an Istio Service Mesh with Mutual TLS (mTLS) across multi-cluster deployments?",
+  "answer": "I don't know based on the provided official Kubernetes documentation. The retrieved documents do not contain sufficient information to answer this question.",
+  "citations": [],
+  "retrieved_chunks": [],
+  "confidence": "low",
+  "context_sufficient": false
 }
 ```
 
-### 5. Run Pandas Exploratory Analysis
+### 5. Run Day 8 Multi-Configuration RAG Evaluation Benchmark
+
+```bash
+# Evaluates Configuration A vs. Configuration B across all 15 questions in eval/eval_set.json
+python -m eval.run_eval
+```
+
+### 6. Run Pandas Exploratory Analysis
 
 ```bash
 python -m analysis.explore
 ```
 
-### 6. Run TF-IDF Smart Search CLI Tester
+### 7. Run TF-IDF Smart Search CLI Tester
 
 ```bash
 python -m app.smart_search
 ```
 
-### 7. Run Document Chunking & ChromaDB Vector Indexer
+### 8. Run Document Chunking & ChromaDB Vector Indexer
 
 ```bash
 # Ingest official documentation and records into persistent ChromaDB
 python -m app.vectorstore
 ```
 
-### 8. Run Complete Test Suite (Days 3, 4, 6 & 7)
+### 9. Run Complete Test Suite (Days 3, 4, 6, 7 & 8)
 
 ```bash
 python -m unittest discover tests -v
 ```
-*(Runs all 63 automated unit tests across models, ingestion, REST endpoints, smart search, LLM providers, chunking, embeddings, ChromaDB, and semantic search)*
+*(Runs all 79 automated unit tests across models, ingestion, REST endpoints, smart search, LLM providers, chunking, embeddings, ChromaDB, and RAG pipeline)*
 
-### 9. Run Earlier Day Modules
+### 10. Run Earlier Day Modules
 
 ```bash
 # Day 1

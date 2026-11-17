@@ -1,0 +1,835 @@
+{
+  "benchmark_timestamp": "2026-11-17 11:04:45",
+  "evaluation_dataset_size": 15,
+  "configurations": {
+    "configuration_a": {
+      "configuration": "Configuration A",
+      "chunk_size": 500,
+      "chunk_overlap": 100,
+      "top_k": 3,
+      "total_chunks_indexed": 435,
+      "aggregate_metrics": {
+        "retrieval_relevance": 0.8667,
+        "citation_correctness": 0.9333,
+        "answer_correctness": 0.3262,
+        "q6_refusal_correct": true,
+        "avg_latency_ms": 926.26,
+        "total_latency_ms": 13893.97
+      },
+      "per_question_results": [
+        {
+          "id": "Q1",
+          "question": "What is a Pod?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Pods (workload):\n\n---\nreviewers:\n- erictune\ntitle: Pods\napi_metadata:\n- apiVersion: \"v1\"\n kind: \"Pod\"\ncontent_type: concept\nweight: 10\nno_list: true\n---\n\n_Pods_ are the smallest deployable units of computing that you can create and manage in Kubernetes. A _Pod_ (as in a pod of whales or pea pod) is a group of one or more\ncontainers, with shared storage and network resources, and a specification for how to run the containers. A Pod's contents are always co-located and\nco-scheduled, and run in a shared context.",
+          "citations_count": 1,
+          "citations": [
+            {
+              "document_title": "Pods",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+              "page": "pods.md",
+              "chunk_id": "pods-md-c001-4bfcfb78"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.4762,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 13496.32
+        },
+        {
+          "id": "Q2",
+          "question": "What is a Deployment?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Deployments (workload):\n\na Deployment\n\nThe following is an example of a Deployment. It creates a ReplicaSet to bring up three `nginx` Pods:\n\n{{% code_sample file=\"controllers/nginx-deployment.yaml\" %}}\n\nIn this example:\n\n* A Deployment named `nginx-deployment` is created, indicated by the\n `.metadata.name` field. This name will become the basis for the ReplicaSets\n and Pods which are created later.",
+          "citations_count": 1,
+          "citations": [
+            {
+              "document_title": "Deployments",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/",
+              "page": "deployment.md",
+              "chunk_id": "deployment-md-c007-48f0f622"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.2857,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 22.43
+        },
+        {
+          "id": "Q3",
+          "question": "What is a Kubernetes Service?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Service (networking):\n\nKubernetes Concept: Service (service)\nCategory: networking\nDefinition: An abstraction that exposes a group of Pods as a network service with a stable endpoint. Key kubectl Command: kubectl expose deployment nginx --port=80\nLimits and Defaults: The default Service type is ClusterIP.\n\nExample command:\n```bash\nkubectl Command\n```",
+          "citations_count": 3,
+          "citations": [
+            {
+              "document_title": "Service",
+              "source_url": "https://kubernetes.io/docs/concepts/services-networking/service/",
+              "page": "records.json#service",
+              "chunk_id": "records-json-service-c001-1652df58"
+            },
+            {
+              "document_title": "Services",
+              "source_url": "https://kubernetes.io/docs/concepts/services-networking/service/",
+              "page": "service.md",
+              "chunk_id": "service-md-c006-09223489"
+            },
+            {
+              "document_title": "ServiceAccounts",
+              "source_url": "https://kubernetes.io/docs/concepts/security/service-accounts/",
+              "page": "records.json#serviceaccount",
+              "chunk_id": "records-json-serviceaccount-c001-617ef4cb"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.25,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 24.63
+        },
+        {
+          "id": "Q4",
+          "question": "How do I store sensitive credentials like passwords and API keys in Kubernetes?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Secrets (configuration):\n\nKubernetes Concept: Secrets (secret)\nCategory: configuration\nDefinition: An object for holding small amounts of sensitive data such as passwords, tokens, or keys. Key kubectl Command: kubectl create secret generic app-secret --from-literal=key=value\nLimits and Defaults: Secret data is base64-encoded, not encrypted by default; encryption at rest is configurable.\n\nExample command:\n```bash\nkubectl Command\n```",
+          "citations_count": 3,
+          "citations": [
+            {
+              "document_title": "Secrets",
+              "source_url": "https://kubernetes.io/docs/concepts/configuration/secret/",
+              "page": "records.json#secret",
+              "chunk_id": "records-json-secret-c001-1875dc6f"
+            },
+            {
+              "document_title": "ConfigMaps",
+              "source_url": "https://kubernetes.io/docs/concepts/configuration/configmap/",
+              "page": "records.json#configmap",
+              "chunk_id": "records-json-configmap-c001-7acb77f4"
+            },
+            {
+              "document_title": "ServiceAccounts",
+              "source_url": "https://kubernetes.io/docs/concepts/security/service-accounts/",
+              "page": "records.json#serviceaccount",
+              "chunk_id": "records-json-serviceaccount-c001-617ef4cb"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.5455,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 23.04
+        },
+        {
+          "id": "Q5",
+          "question": "How do I isolate resources and define team permissions within a single cluster?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Ingress (networking):\n\nsed for a workload. If you used a cluster-scoped parameter then either:\n\n- the cluster operator team needs to approve a different team's changes every\n time there's a new configuration change being applied. - the cluster operator must define specific access controls, such as\n RBAC (/docs/reference/access-authn-authz/rbac/) roles and bindings, that let\n the application team make changes to the cluster-scoped parameters resource.",
+          "citations_count": 3,
+          "citations": [
+            {
+              "document_title": "Ingress",
+              "source_url": "https://kubernetes.io/docs/concepts/services-networking/ingress/",
+              "page": "ingress.md",
+              "chunk_id": "ingress-md-c035-79be669e"
+            },
+            {
+              "document_title": "Role",
+              "source_url": "https://kubernetes.io/docs/reference/access-authn-authz/rbac/",
+              "page": "records.json#role",
+              "chunk_id": "records-json-role-c001-7b528b5f"
+            },
+            {
+              "document_title": "Resource Quotas",
+              "source_url": "https://kubernetes.io/docs/concepts/policy/resource-quotas/",
+              "page": "records.json#resourcequota",
+              "chunk_id": "records-json-resourcequota-c001-fd5dff2a"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.32,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 23.8
+        },
+        {
+          "id": "Q6",
+          "question": "How do I configure an Istio Service Mesh with Mutual TLS (mTLS) across multi-cluster deployments?",
+          "is_answerable": false,
+          "answer": "I don't know based on the provided official Kubernetes documentation. The retrieved documents do not contain sufficient information to answer this question.",
+          "citations_count": 0,
+          "citations": [],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 1.0,
+          "q6_refusal_correct": true,
+          "context_sufficient": false,
+          "latency_ms": 30.02
+        },
+        {
+          "id": "Q7",
+          "question": "How do I ensure a logging or monitoring pod runs on every single worker node in my cluster?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Pods (workload):\n\nas application containers, a Pod can contain\ninit containers that run\nduring Pod startup. You can also inject\nephemeral containers\nfor debugging a running Pod. ## What is a Pod?",
+          "citations_count": 1,
+          "citations": [
+            {
+              "document_title": "Pods",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+              "page": "pods.md",
+              "chunk_id": "pods-md-c003-3bee7adc"
+            }
+          ],
+          "retrieval_relevance": 0.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.1579,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 25.44
+        },
+        {
+          "id": "Q8",
+          "question": "What is the difference between a ConfigMap and a Secret for environment variables?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for ConfigMaps (configuration):\n\n---\ntitle: ConfigMaps\napi_metadata:\n- apiVersion: \"v1\"\n kind: \"ConfigMap\"\ncontent_type: concept\nweight: 20\n---\n\nConfigMap does not provide secrecy or encryption. If the data you want to store are confidential, use a\nSecret rather than a ConfigMap,\nor use additional (third party) tools to keep your data private. ## Motivation\n\nUse a ConfigMap for setting configuration data separately from application code.",
+          "citations_count": 1,
+          "citations": [
+            {
+              "document_title": "ConfigMaps",
+              "source_url": "https://kubernetes.io/docs/concepts/configuration/configmap/",
+              "page": "configmap.md",
+              "chunk_id": "configmap-md-c001-abc0bcbb"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.2143,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 24.64
+        },
+        {
+          "id": "Q9",
+          "question": "How can an administrator restrict total CPU and memory consumption in a specific namespace?",
+          "is_answerable": true,
+          "answer": "I don't know based on the provided official Kubernetes documentation. The retrieved documents do not contain sufficient information to answer this question.",
+          "citations_count": 0,
+          "citations": [],
+          "retrieval_relevance": 0.0,
+          "citation_correctness": 0.0,
+          "answer_correctness": 0.0,
+          "q6_refusal_correct": true,
+          "context_sufficient": false,
+          "latency_ms": 24.58
+        },
+        {
+          "id": "Q10",
+          "question": "What controller should I use for a stateful database that requires stable network identities and dedicated storage?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Pods (workload):\n\nd to track state, consider the\nStatefulSet resource. Each Pod is meant to run a single instance of a given application. If you want to\nscale your application horizontally (to provide more overall resources by running\nmore instances), you should use multiple Pods, one for each instance.",
+          "citations_count": 3,
+          "citations": [
+            {
+              "document_title": "Pods",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+              "page": "pods.md",
+              "chunk_id": "pods-md-c009-a851d213"
+            },
+            {
+              "document_title": "Deployments",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/",
+              "page": "deployment.md",
+              "chunk_id": "deployment-md-c003-0a77f5ea"
+            },
+            {
+              "document_title": "StatefulSets",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/",
+              "page": "records.json#statefulset",
+              "chunk_id": "records-json-statefulset-c001-e5664c86"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.2273,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 26.32
+        },
+        {
+          "id": "Q11",
+          "question": "What are the allowed values for a Pod restartPolicy and what is the default?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Pods (workload):\n\nrestartPolicy: OnFailure\n # The pod template ends here\n```\n\nModifying the pod template or switching to a new pod template has no direct effect\non the Pods that already exist. If you change the pod template for a workload\nresource, that resource needs to create replacement Pods that use the updated template. For example, the StatefulSet controller ensures that the running Pods match the current\npod template for each StatefulSet object.",
+          "citations_count": 2,
+          "citations": [
+            {
+              "document_title": "Pods",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+              "page": "pods.md",
+              "chunk_id": "pods-md-c022-499422d3"
+            },
+            {
+              "document_title": "Deployments",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/",
+              "page": "deployment.md",
+              "chunk_id": "deployment-md-c112-0da0637f"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.2,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 29.01
+        },
+        {
+          "id": "Q12",
+          "question": "What is the difference between a ClusterIP and a NodePort Service?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Services (networking):\n\n].nodePort` field. Using a NodePort gives you the freedom to set up your own load balancing solution,\nto configure environments that are not fully supported by Kubernetes, or even\nto expose one or more nodes' IP addresses directly. For a node port Service, Kubernetes additionally allocates a port (TCP, UDP or\nSCTP to match the protocol of the Service).",
+          "citations_count": 1,
+          "citations": [
+            {
+              "document_title": "Services",
+              "source_url": "https://kubernetes.io/docs/concepts/services-networking/service/",
+              "page": "service.md",
+              "chunk_id": "service-md-c049-a611006d"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.2273,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 32.05
+        },
+        {
+          "id": "Q13",
+          "question": "How does a Deployment perform a rolling update when the container image is updated?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Deployments (workload):\n\nyment while an existing rollout is in progress, the Deployment creates a new ReplicaSet\nas per the update and start scaling that up, and rolls over the ReplicaSet that it was scaling up previously\n-- it will add it to its list of old ReplicaSets and start scaling it down. For example, suppose you create a Deployment to create 5 replicas of `nginx:1.14.2`,\nbut then update the Deployment to create 5 replicas of `nginx:1.16.1`, when only 3\nreplicas of `nginx:1.14.2` had been created.",
+          "citations_count": 1,
+          "citations": [
+            {
+              "document_title": "Deployments",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/",
+              "page": "deployment.md",
+              "chunk_id": "deployment-md-c038-125d8c57"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.3158,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 33.56
+        },
+        {
+          "id": "Q14",
+          "question": "What is an Ingress Controller and why is an Ingress resource alone not enough?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Ingress (networking):\n\nngress resource has no effect. You can choose from a number of Ingress controllers (/docs/concepts/services-networking/ingress-controllers). Ideally, all Ingress controllers should fit the reference specification.",
+          "citations_count": 1,
+          "citations": [
+            {
+              "document_title": "Ingress",
+              "source_url": "https://kubernetes.io/docs/concepts/services-networking/ingress/",
+              "page": "ingress.md",
+              "chunk_id": "ingress-md-c009-1a3cd0bd"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.2,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 41.85
+        },
+        {
+          "id": "Q15",
+          "question": "What is the difference between a PersistentVolume (PV) and a PersistentVolumeClaim (PVC)?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for PersistentVolumes (storage):\n\nKubernetes Concept: PersistentVolumes (persistentvolume)\nCategory: storage\nDefinition: A piece of storage in a cluster provisioned by an administrator or dynamically provisioned. Key kubectl Command: kubectl get persistentvolumes\nLimits and Defaults: Capacity, access modes, and reclaim policy are specified per volume.\n\nExample command:\n```bash\nkubectl Command\n```",
+          "citations_count": 3,
+          "citations": [
+            {
+              "document_title": "PersistentVolumes",
+              "source_url": "https://kubernetes.io/docs/concepts/storage/persistent-volumes/",
+              "page": "records.json#persistentvolume",
+              "chunk_id": "records-json-persistentvolume-c001-0434e06e"
+            },
+            {
+              "document_title": "PersistentVolumeClaims",
+              "source_url": "https://kubernetes.io/docs/concepts/storage/persistent-volumes/",
+              "page": "records.json#persistentvolumeclaim",
+              "chunk_id": "records-json-persistentvolumeclaim-c001-6d7ce56b"
+            },
+            {
+              "document_title": "ConfigMaps",
+              "source_url": "https://kubernetes.io/docs/concepts/configuration/configmap/",
+              "page": "configmap.md",
+              "chunk_id": "configmap-md-c017-cd7cac15"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.4737,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 36.29
+        }
+      ]
+    },
+    "configuration_b": {
+      "configuration": "Configuration B",
+      "chunk_size": 800,
+      "chunk_overlap": 150,
+      "top_k": 5,
+      "total_chunks_indexed": 275,
+      "aggregate_metrics": {
+        "retrieval_relevance": 0.8667,
+        "citation_correctness": 1.0,
+        "answer_correctness": 0.3202,
+        "q6_refusal_correct": true,
+        "avg_latency_ms": 32.29,
+        "total_latency_ms": 484.31
+      },
+      "per_question_results": [
+        {
+          "id": "Q1",
+          "question": "What is a Pod?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Pods (workload):\n\n---\nreviewers:\n- erictune\ntitle: Pods\napi_metadata:\n- apiVersion: \"v1\"\n kind: \"Pod\"\ncontent_type: concept\nweight: 10\nno_list: true\n---\n\n_Pods_ are the smallest deployable units of computing that you can create and manage in Kubernetes. A _Pod_ (as in a pod of whales or pea pod) is a group of one or more\ncontainers, with shared storage and network resources, and a specification for how to run the containers. A Pod's contents are always co-located and\nco-scheduled, and run in a shared context.",
+          "citations_count": 1,
+          "citations": [
+            {
+              "document_title": "Pods",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+              "page": "pods.md",
+              "chunk_id": "pods-md-c001-ca24fb56"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.4762,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 89.82
+        },
+        {
+          "id": "Q2",
+          "question": "What is a Deployment?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Deployments (workload):\n\nKubernetes Concept: Deployments (deployment)\nCategory: workload\nDefinition: A controller that declaratively manages Pods and ReplicaSets for application workloads. Key kubectl Command: kubectl create deployment nginx --image=nginx\nLimits and Defaults: The default rolling update strategy allows 25% max unavailable and 25% max surge.\n\nExample command:\n```bash\nkubectl Command\n```",
+          "citations_count": 1,
+          "citations": [
+            {
+              "document_title": "Deployments",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/",
+              "page": "records.json#deployment",
+              "chunk_id": "records-json-deployment-c001-859e0041"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.4286,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 21.62
+        },
+        {
+          "id": "Q3",
+          "question": "What is a Kubernetes Service?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Service (networking):\n\nKubernetes Concept: Service (service)\nCategory: networking\nDefinition: An abstraction that exposes a group of Pods as a network service with a stable endpoint. Key kubectl Command: kubectl expose deployment nginx --port=80\nLimits and Defaults: The default Service type is ClusterIP.\n\nExample command:\n```bash\nkubectl Command\n```",
+          "citations_count": 5,
+          "citations": [
+            {
+              "document_title": "Service",
+              "source_url": "https://kubernetes.io/docs/concepts/services-networking/service/",
+              "page": "records.json#service",
+              "chunk_id": "records-json-service-c001-1652df58"
+            },
+            {
+              "document_title": "ServiceAccounts",
+              "source_url": "https://kubernetes.io/docs/concepts/security/service-accounts/",
+              "page": "records.json#serviceaccount",
+              "chunk_id": "records-json-serviceaccount-c001-617ef4cb"
+            },
+            {
+              "document_title": "DaemonSet",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/",
+              "page": "records.json#daemonset",
+              "chunk_id": "records-json-daemonset-c001-e92277dd"
+            },
+            {
+              "document_title": "Services",
+              "source_url": "https://kubernetes.io/docs/concepts/services-networking/service/",
+              "page": "service.md",
+              "chunk_id": "service-md-c004-e8c0c0e0"
+            },
+            {
+              "document_title": "Ingress",
+              "source_url": "https://kubernetes.io/docs/concepts/services-networking/ingress/",
+              "page": "records.json#ingress",
+              "chunk_id": "records-json-ingress-c001-8b09de4a"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.25,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 24.42
+        },
+        {
+          "id": "Q4",
+          "question": "How do I store sensitive credentials like passwords and API keys in Kubernetes?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Secrets (configuration):\n\nKubernetes Concept: Secrets (secret)\nCategory: configuration\nDefinition: An object for holding small amounts of sensitive data such as passwords, tokens, or keys. Key kubectl Command: kubectl create secret generic app-secret --from-literal=key=value\nLimits and Defaults: Secret data is base64-encoded, not encrypted by default; encryption at rest is configurable.\n\nExample command:\n```bash\nkubectl Command\n```",
+          "citations_count": 3,
+          "citations": [
+            {
+              "document_title": "Secrets",
+              "source_url": "https://kubernetes.io/docs/concepts/configuration/secret/",
+              "page": "records.json#secret",
+              "chunk_id": "records-json-secret-c001-1875dc6f"
+            },
+            {
+              "document_title": "ConfigMaps",
+              "source_url": "https://kubernetes.io/docs/concepts/configuration/configmap/",
+              "page": "configmap.md",
+              "chunk_id": "configmap-md-c001-b19b890d"
+            },
+            {
+              "document_title": "ServiceAccounts",
+              "source_url": "https://kubernetes.io/docs/concepts/security/service-accounts/",
+              "page": "records.json#serviceaccount",
+              "chunk_id": "records-json-serviceaccount-c001-617ef4cb"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.5455,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 25.89
+        },
+        {
+          "id": "Q5",
+          "question": "How do I isolate resources and define team permissions within a single cluster?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Namespaces (cluster-management):\n\nad across multiple\nteams, or projects. For clusters with a few to tens of users, you should not\nneed to create or think about namespaces at all. Start using namespaces when you\nneed the features they provide.",
+          "citations_count": 5,
+          "citations": [
+            {
+              "document_title": "Namespaces",
+              "source_url": "https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/",
+              "page": "namespaces.md",
+              "chunk_id": "namespaces-md-c002-75f6c551"
+            },
+            {
+              "document_title": "Role",
+              "source_url": "https://kubernetes.io/docs/reference/access-authn-authz/rbac/",
+              "page": "records.json#role",
+              "chunk_id": "records-json-role-c001-7b528b5f"
+            },
+            {
+              "document_title": "Pods",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+              "page": "pods.md",
+              "chunk_id": "pods-md-c011-7a4ffab2"
+            },
+            {
+              "document_title": "Resource Quotas",
+              "source_url": "https://kubernetes.io/docs/concepts/policy/resource-quotas/",
+              "page": "records.json#resourcequota",
+              "chunk_id": "records-json-resourcequota-c001-fd5dff2a"
+            },
+            {
+              "document_title": "RoleBinding",
+              "source_url": "https://kubernetes.io/docs/reference/access-authn-authz/rbac/",
+              "page": "records.json#rolebinding",
+              "chunk_id": "records-json-rolebinding-c001-ed58dee6"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.2,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 33.2
+        },
+        {
+          "id": "Q6",
+          "question": "How do I configure an Istio Service Mesh with Mutual TLS (mTLS) across multi-cluster deployments?",
+          "is_answerable": false,
+          "answer": "I don't know based on the provided official Kubernetes documentation. The retrieved documents do not contain sufficient information to answer this question.",
+          "citations_count": 0,
+          "citations": [],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 1.0,
+          "q6_refusal_correct": true,
+          "context_sufficient": false,
+          "latency_ms": 27.81
+        },
+        {
+          "id": "Q7",
+          "question": "How do I ensure a logging or monitoring pod runs on every single worker node in my cluster?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Pods (workload):\n\ne-scheduler may assign the Pod\nto a node whose OS is unsuitable for its containers. The Pod security standards (/docs/concepts/security/pod-security-standards/) also use the `.spec.os.name` field to avoid enforcing policies that aren't relevant to the operating system. ### Pods and controllers\n\nYou can use workload resources to create and manage multiple Pods for you.",
+          "citations_count": 2,
+          "citations": [
+            {
+              "document_title": "Pods",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+              "page": "pods.md",
+              "chunk_id": "pods-md-c010-fa383b74"
+            },
+            {
+              "document_title": "Services",
+              "source_url": "https://kubernetes.io/docs/concepts/services-networking/service/",
+              "page": "service.md",
+              "chunk_id": "service-md-c003-fc91660b"
+            }
+          ],
+          "retrieval_relevance": 0.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.2105,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 27.19
+        },
+        {
+          "id": "Q8",
+          "question": "What is the difference between a ConfigMap and a Secret for environment variables?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for ConfigMaps (configuration):\n\n---\ntitle: ConfigMaps\napi_metadata:\n- apiVersion: \"v1\"\n kind: \"ConfigMap\"\ncontent_type: concept\nweight: 20\n---\n\nConfigMap does not provide secrecy or encryption. If the data you want to store are confidential, use a\nSecret rather than a ConfigMap,\nor use additional (third party) tools to keep your data private. ## Motivation\n\nUse a ConfigMap for setting configuration data separately from application code.",
+          "citations_count": 1,
+          "citations": [
+            {
+              "document_title": "ConfigMaps",
+              "source_url": "https://kubernetes.io/docs/concepts/configuration/configmap/",
+              "page": "configmap.md",
+              "chunk_id": "configmap-md-c001-b19b890d"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.2143,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 33.77
+        },
+        {
+          "id": "Q9",
+          "question": "How can an administrator restrict total CPU and memory consumption in a specific namespace?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Namespaces (cluster-management):\n\n/tasks/administer-cluster/namespaces/#creating-a-new-namespace). * Learn more about deleting a namespace (/docs/tasks/administer-cluster/namespaces/#deleting-a-namespace).",
+          "citations_count": 2,
+          "citations": [
+            {
+              "document_title": "Namespaces",
+              "source_url": "https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/",
+              "page": "namespaces.md",
+              "chunk_id": "namespaces-md-c010-62ec4ff1"
+            },
+            {
+              "document_title": "Pods",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+              "page": "pods.md",
+              "chunk_id": "pods-md-c028-25e2f236"
+            }
+          ],
+          "retrieval_relevance": 0.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.087,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 22.95
+        },
+        {
+          "id": "Q10",
+          "question": "What controller should I use for a stateful database that requires stable network identities and dedicated storage?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Pods (workload):\n\napache.org/documentation/latest/reference/configuration/#job-schema)\n* Borg (https://research.google/pubs/large-scale-cluster-management-at-google-with-borg/)\n* Marathon (https://github.com/d2iq-archive/marathon)\n* Omega (https://research.google/pubs/pub41684/)\n* Tupperware (https://engineering.fb.com/data-center-engineering/tupperware/).",
+          "citations_count": 4,
+          "citations": [
+            {
+              "document_title": "Pods",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+              "page": "pods.md",
+              "chunk_id": "pods-md-c037-656f5df5"
+            },
+            {
+              "document_title": "StatefulSets",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/",
+              "page": "records.json#statefulset",
+              "chunk_id": "records-json-statefulset-c001-e5664c86"
+            },
+            {
+              "document_title": "ConfigMaps",
+              "source_url": "https://kubernetes.io/docs/concepts/configuration/configmap/",
+              "page": "configmap.md",
+              "chunk_id": "configmap-md-c001-b19b890d"
+            },
+            {
+              "document_title": "Ingress",
+              "source_url": "https://kubernetes.io/docs/concepts/services-networking/ingress/",
+              "page": "ingress.md",
+              "chunk_id": "ingress-md-c038-1506da6b"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.0909,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 24.52
+        },
+        {
+          "id": "Q11",
+          "question": "What are the allowed values for a Pod restartPolicy and what is the default?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Deployments (workload):\n\nte\n\nThe `.spec.template` and `.spec.selector` are the only required fields of the `.spec`. The `.spec.template` is a Pod template (/docs/concepts/workloads/pods/#pod-templates). It has exactly the same schema as a Pod, except it is nested and does not have an `apiVersion` or `kind`.",
+          "citations_count": 2,
+          "citations": [
+            {
+              "document_title": "Deployments",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/",
+              "page": "deployment.md",
+              "chunk_id": "deployment-md-c069-8eae31a6"
+            },
+            {
+              "document_title": "Pods",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+              "page": "pods.md",
+              "chunk_id": "pods-md-c007-30c36f51"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.2,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 24.97
+        },
+        {
+          "id": "Q12",
+          "question": "What is the difference between a ClusterIP and a NodePort Service?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Services (networking):\n\n(TCP, UDP or\nSCTP to match the protocol of the Service). Every node in the cluster configures\nitself to listen on that assigned port and to forward traffic to one of the ready\nendpoints associated with that Service. You'll be able to contact the `type: NodePort`\nService, from outside the cluster, by connecting to any node using the appropriate\nprotocol (for example: TCP), and the appropriate port (as assigned to that Service).",
+          "citations_count": 3,
+          "citations": [
+            {
+              "document_title": "Services",
+              "source_url": "https://kubernetes.io/docs/concepts/services-networking/service/",
+              "page": "service.md",
+              "chunk_id": "service-md-c031-6402c2bc"
+            },
+            {
+              "document_title": "Ingress",
+              "source_url": "https://kubernetes.io/docs/concepts/services-networking/ingress/",
+              "page": "ingress.md",
+              "chunk_id": "ingress-md-c003-321ad0ec"
+            },
+            {
+              "document_title": "Service",
+              "source_url": "https://kubernetes.io/docs/concepts/services-networking/service/",
+              "page": "records.json#service",
+              "chunk_id": "records-json-service-c001-1652df58"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.3182,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 23.07
+        },
+        {
+          "id": "Q13",
+          "question": "How does a Deployment perform a rolling update when the container image is updated?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Deployments (workload):\n\nefault, all of the Deployment's rollout history is kept in the system so that you can rollback anytime you want\n(you can change that by modifying revision history limit). A Deployment's revision is created when a Deployment's rollout is triggered. This means that the\nnew revision is created if and only if the Deployment's Pod template (`.spec.template`) is changed,\nfor example if you update the labels or container images of the template.",
+          "citations_count": 1,
+          "citations": [
+            {
+              "document_title": "Deployments",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/",
+              "page": "deployment.md",
+              "chunk_id": "deployment-md-c028-520f625f"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.1579,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 46.77
+        },
+        {
+          "id": "Q14",
+          "question": "What is an Ingress Controller and why is an Ingress resource alone not enough?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for Ingress (networking):\n\nm a number of Ingress controllers (/docs/concepts/services-networking/ingress-controllers). Ideally, all Ingress controllers should fit the reference specification. In reality, the various Ingress\ncontrollers operate slightly differently.",
+          "citations_count": 1,
+          "citations": [
+            {
+              "document_title": "Ingress",
+              "source_url": "https://kubernetes.io/docs/concepts/services-networking/ingress/",
+              "page": "ingress.md",
+              "chunk_id": "ingress-md-c006-75ffbc1e"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.15,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 30.12
+        },
+        {
+          "id": "Q15",
+          "question": "What is the difference between a PersistentVolume (PV) and a PersistentVolumeClaim (PVC)?",
+          "is_answerable": true,
+          "answer": "Based on official Kubernetes documentation for PersistentVolumes (storage):\n\nKubernetes Concept: PersistentVolumes (persistentvolume)\nCategory: storage\nDefinition: A piece of storage in a cluster provisioned by an administrator or dynamically provisioned. Key kubectl Command: kubectl get persistentvolumes\nLimits and Defaults: Capacity, access modes, and reclaim policy are specified per volume.\n\nExample command:\n```bash\nkubectl Command\n```",
+          "citations_count": 3,
+          "citations": [
+            {
+              "document_title": "PersistentVolumes",
+              "source_url": "https://kubernetes.io/docs/concepts/storage/persistent-volumes/",
+              "page": "records.json#persistentvolume",
+              "chunk_id": "records-json-persistentvolume-c001-0434e06e"
+            },
+            {
+              "document_title": "PersistentVolumeClaims",
+              "source_url": "https://kubernetes.io/docs/concepts/storage/persistent-volumes/",
+              "page": "records.json#persistentvolumeclaim",
+              "chunk_id": "records-json-persistentvolumeclaim-c001-6d7ce56b"
+            },
+            {
+              "document_title": "Pods",
+              "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+              "page": "pods.md",
+              "chunk_id": "pods-md-c022-8635b975"
+            }
+          ],
+          "retrieval_relevance": 1.0,
+          "citation_correctness": 1.0,
+          "answer_correctness": 0.4737,
+          "q6_refusal_correct": true,
+          "context_sufficient": true,
+          "latency_ms": 28.2
+        }
+      ]
+    }
+  }
+}
