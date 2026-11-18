@@ -1,227 +1,421 @@
 """
-app/tools.py - KubeCoach Agent Tools and Registry (Day 9)
+app/tools.py - Production-Quality KubeCoach Agent Tools & Registry (Day 9)
 
-Implements safe, read-only tools for the KubeCoach AI Agent:
-1. `k8s_rag_search`: Retrieval-Augmented Generation over official Kubernetes docs.
-2. `k8s_quantity_converter`: Project-card assigned developer tool for converting
-   Kubernetes CPU and Memory quantity representations (millicores, cores, Ki, Mi, Gi, etc.).
+Implements two deterministic, safe, read-only tools for the KubeCoach AI Agent:
+1. `k8s_rag_search`: Retrieval-Augmented Generation over official Kubernetes docs
+   preserving title, URL, page, and chunk metadata, with honest insufficient-context reporting.
+2. `k8s_quantity_converter`: Project-card assigned developer tool (SJ-58) using exact
+   `decimal.Decimal` arithmetic to parse, convert, and compare Kubernetes CPU and Memory
+   resource quantities (distinguishing binary SI vs. decimal SI suffixes).
 """
 
 from __future__ import annotations
+
 import logging
-import math
 import re
-from typing import Any, Dict, List, Optional, Union
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from app.rag import execute_rag_pipeline
 
 logger = logging.getLogger("kubecoach.tools")
 
 # ---------------------------------------------------------------------------
-# Tool 1: k8s_quantity_converter (Project Card Tool: SJ-58 Developer Tools)
+# Constants & Exact Decimal Multipliers (Official Kubernetes Quantity Spec)
+# https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 # ---------------------------------------------------------------------------
 
-# Kubernetes memory multipliers based on official documentation:
-# https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#meaning-of-memory
-MEMORY_BINARY_MULTIPLIERS = {
-    "ki": 1024,
-    "mi": 1024**2,
-    "gi": 1024**3,
-    "ti": 1024**4,
-    "pi": 1024**5,
-    "ei": 1024**6,
+BINARY_SI_MULTIPLIERS: Dict[str, Decimal] = {
+    "Ki": Decimal(1024),
+    "Mi": Decimal(1024**2),
+    "Gi": Decimal(1024**3),
+    "Ti": Decimal(1024**4),
+    "Pi": Decimal(1024**5),
+    "Ei": Decimal(1024**6),
 }
 
-MEMORY_DECIMAL_MULTIPLIERS = {
-    "k": 1000,
-    "m": 1000**2,
-    "g": 1000**3,
-    "t": 1000**4,
-    "p": 1000**5,
-    "e": 1000**6,
+DECIMAL_SI_MULTIPLIERS: Dict[str, Decimal] = {
+    "k": Decimal(1000),
+    "K": Decimal(1000),
+    "M": Decimal(1000**2),
+    "G": Decimal(1000**3),
+    "T": Decimal(1000**4),
+    "P": Decimal(1000**5),
+    "E": Decimal(1000**6),
+}
+
+MAX_CPU_CORES = Decimal("10000000")
+MAX_MEMORY_BYTES = Decimal("1000000000000000000")  # 10^18 bytes (1 Exabyte)
+
+SUPPORTED_CPU_TARGET_UNITS = {"m", "millicore", "millicores", "core", "cores", "c"}
+SUPPORTED_MEMORY_TARGET_UNITS = {
+    "b", "byte", "bytes",
+    "ki", "kib", "mi", "mib", "gi", "gib", "ti", "tib", "pi", "pib", "ei", "eib",
+    "k", "kb", "m", "mb", "g", "gb", "t", "tb", "p", "pb", "e", "eb",
 }
 
 
-def _parse_cpu_quantity(quantity: str, target_unit: Optional[str] = None) -> Dict[str, Any]:
-    """Parse and convert a Kubernetes CPU quantity (cores or millicores)."""
-    cleaned = quantity.strip().rstrip("sS").rstrip("coreCORE").strip()
-
-    if cleaned.endswith("m") or cleaned.endswith("M"):
-        # Millicores: e.g., "500m"
-        val_str = cleaned[:-1].strip()
-        try:
-            millicores = float(val_str)
-        except ValueError:
-            raise ValueError(f"Invalid numeric value in CPU quantity '{quantity}'")
-        cores = millicores / 1000.0
-    else:
-        # Whole or fractional cores: e.g., "1", "0.5", "2"
-        try:
-            cores = float(cleaned)
-        except ValueError:
-            raise ValueError(f"Invalid numeric value in CPU quantity '{quantity}'")
-        millicores = cores * 1000.0
-
-    if cores < 0 or millicores < 0:
-        raise ValueError(f"CPU quantity cannot be negative: '{quantity}'")
-    if cores > 10_000_000:
-        raise ValueError(f"CPU quantity exceeds maximum reasonable cluster bound (10,000,000 cores): '{quantity}'")
-
-    # Format cleanly
-    millicores_int = int(round(millicores)) if abs(millicores - round(millicores)) < 1e-6 else round(millicores, 3)
-    cores_clean = int(cores) if cores.is_integer() else round(cores, 4)
-
-    representations = {
-        "cores": cores_clean,
-        "millicores": f"{millicores_int}m",
-        "millicores_numeric": millicores_int,
-    }
-
-    target_converted = None
-    if target_unit:
-        tu = target_unit.strip().lower()
-        if tu in ("m", "milli", "millicore", "millicores"):
-            target_converted = f"{millicores_int}m"
-        elif tu in ("c", "core", "cores"):
-            target_converted = f"{cores_clean} cores"
-        else:
-            target_converted = f"{cores_clean} cores ({millicores_int}m)"
-
-    explanation = (
-        f"{quantity} CPU is equivalent to {cores_clean} core(s) ({millicores_int} millicores). "
-        f"In Kubernetes, 1 CPU core equals 1000m (1000 millicores). "
-        f"A container requesting {quantity} is allocated {cores_clean} hyperthread(s)/CPU share(s)."
-    )
-
-    return {
-        "tool": "k8s_quantity_converter",
-        "input": quantity,
-        "resource_type": "cpu",
-        "canonical_value": f"{cores_clean} cores",
-        "representations": representations,
-        "target_conversion": target_converted,
-        "explanation": explanation,
-        "success": True,
-    }
+def _format_decimal(value: Decimal, max_places: int = 6) -> str:
+    """Format a Decimal cleanly without scientific notation or redundant trailing zeros."""
+    quantizer = Decimal(10) ** (-max_places)
+    rounded = value.quantize(quantizer, rounding=ROUND_HALF_UP)
+    normalized = format(rounded, "f")
+    if "." in normalized:
+        normalized = normalized.rstrip("0").rstrip(".")
+    return normalized or "0"
 
 
-def _parse_memory_quantity(quantity: str, target_unit: Optional[str] = None) -> Dict[str, Any]:
-    """Parse and convert a Kubernetes Memory quantity (bytes, Ki, Mi, Gi, Ti, K, M, G, etc.)."""
-    cleaned = quantity.strip().rstrip("bB").strip()
+def _to_number(value: Decimal, max_places: int = 6) -> Any:
+    """Convert Decimal to int if exact integer, else rounded float for JSON serialization."""
+    formatted = _format_decimal(value, max_places=max_places)
+    return int(formatted) if "." not in formatted else float(formatted)
 
-    # Pattern: optional sign, digits/floats, optional suffix
-    match = re.match(r"^([0-9]+(?:\.[0-9]+)?)\s*([a-zA-Z]+)?$", cleaned)
-    if not match:
+
+def _classify_and_parse_quantity(
+    raw_quantity: str,
+    hint_type: Optional[str] = None,
+) -> Tuple[str, Decimal, str]:
+    """Parse a Kubernetes quantity string into (resource_type, canonical_decimal, suffix_system).
+
+    Canonical units:
+        - CPU: cores (Decimal)
+        - Memory: bytes (Decimal)
+
+    Raises:
+        ValueError: On missing, negative, malformed, unsupported suffix, or out-of-bounds values.
+    """
+    if not isinstance(raw_quantity, str) or not raw_quantity.strip():
+        raise ValueError("Quantity must be a non-empty string.")
+
+    text = raw_quantity.strip()
+
+    # Explicitly reject negative values immediately with clear message
+    if text.startswith("-"):
+        raise ValueError(f"Kubernetes resource quantities cannot be negative: '{raw_quantity}'.")
+
+    # Reject NaN / Infinity
+    if text.lower() in ("nan", "inf", "+inf", "-inf", "infinity"):
+        raise ValueError(f"Invalid non-finite Kubernetes quantity: '{raw_quantity}'.")
+
+    # Normalize optional descriptive words like '2 cores' or '500 millicores' or '1024 bytes'
+    explicit_cpu_match = re.match(r"^([0-9]+(?:\.[0-9]+)?)\s*(cores?|cpu|millicores?)$", text, re.IGNORECASE)
+    if explicit_cpu_match:
+        num_str, unit_word = explicit_cpu_match.groups()
+        val = Decimal(num_str)
+        if unit_word.lower().startswith("milli"):
+            cores = val / Decimal("1000")
+            if cores > MAX_CPU_CORES:
+                raise ValueError(f"CPU quantity exceeds cluster limit ({MAX_CPU_CORES} cores): '{raw_quantity}'.")
+            return ("cpu", cores, "millicores")
+        if val > MAX_CPU_CORES:
+            raise ValueError(f"CPU quantity exceeds cluster limit ({MAX_CPU_CORES} cores): '{raw_quantity}'.")
+        return ("cpu", val, "cores")
+
+    explicit_bytes_match = re.match(r"^([0-9]+(?:\.[0-9]+)?)\s*(bytes?|B)$", text)
+    if explicit_bytes_match:
+        num_str = explicit_bytes_match.group(1)
+        val = Decimal(num_str)
+        if val > MAX_MEMORY_BYTES:
+            raise ValueError(f"Memory quantity exceeds cluster limit (1 Exabyte): '{raw_quantity}'.")
+        return ("memory", val, "bytes")
+
+    # Strict Kubernetes quantity token pattern: <number><optional_suffix>
+    token_match = re.match(r"^([0-9]+(?:\.[0-9]+)?)\s*([a-zA-Z]+)?$", text)
+    if not token_match:
         raise ValueError(
-            f"Invalid Kubernetes memory quantity format: '{quantity}'. "
-            f"Expected examples: '128Mi', '2Gi', '512Ki', '100M', '1048576'."
+            f"Invalid Kubernetes quantity format: '{raw_quantity}'. "
+            "Use examples like '500m', '1000m', '2' (CPU) or '512Mi', '1Gi', '1G' (Memory)."
         )
 
-    num_part, suffix_part = match.groups()
-    num = float(num_part)
-    suffix = (suffix_part or "").strip()
+    num_str, suffix = token_match.groups()
+    try:
+        num = Decimal(num_str)
+    except InvalidOperation as exc:
+        raise ValueError(f"Invalid numeric value in quantity '{raw_quantity}'.") from exc
 
     if num < 0:
-        raise ValueError(f"Memory quantity cannot be negative: '{quantity}'")
+        raise ValueError(f"Kubernetes resource quantities cannot be negative: '{raw_quantity}'.")
 
+    # Case 1: Plain number with no suffix
     if not suffix:
-        # Plain bytes
-        total_bytes = int(round(num))
-    else:
-        suffix_lower = suffix.lower()
-        if suffix_lower in MEMORY_BINARY_MULTIPLIERS:
-            multiplier = MEMORY_BINARY_MULTIPLIERS[suffix_lower]
-            total_bytes = int(round(num * multiplier))
-        elif suffix_lower in MEMORY_DECIMAL_MULTIPLIERS:
-            multiplier = MEMORY_DECIMAL_MULTIPLIERS[suffix_lower]
-            total_bytes = int(round(num * multiplier))
-        else:
-            raise ValueError(
-                f"Unknown memory unit suffix '{suffix}' in '{quantity}'. "
-                f"Supported binary units: Ki, Mi, Gi, Ti, Pi, Ei. "
-                f"Supported decimal units: K, M, G, T, P, E."
-            )
+        if hint_type == "memory" or (hint_type != "cpu" and num > Decimal("64")):
+            if num > MAX_MEMORY_BYTES:
+                raise ValueError(f"Memory quantity exceeds cluster limit (1 Exabyte): '{raw_quantity}'.")
+            return ("memory", num, "bytes")
+        if num > MAX_CPU_CORES:
+            raise ValueError(f"CPU quantity exceeds cluster limit ({MAX_CPU_CORES} cores): '{raw_quantity}'.")
+        return ("cpu", num, "cores")
 
-    if total_bytes > 10**18:
-        raise ValueError(f"Memory quantity exceeds maximum cluster bound (1 Exabyte): '{quantity}'")
+    # Case 2: Exact lowercase 'm' -> Kubernetes CPU millicores
+    if suffix == "m":
+        cores = num / Decimal("1000")
+        if cores > MAX_CPU_CORES:
+            raise ValueError(f"CPU quantity exceeds cluster limit ({MAX_CPU_CORES} cores): '{raw_quantity}'.")
+        return ("cpu", cores, "millicores")
 
-    # Calculate standard representations
-    kib = round(total_bytes / 1024, 2)
-    mib = round(total_bytes / (1024**2), 2)
-    gib = round(total_bytes / (1024**3), 3)
-    tib = round(total_bytes / (1024**4), 4)
+    # Case 3: Exact Binary SI memory suffixes (Ki, Mi, Gi, Ti, Pi, Ei)
+    if suffix in BINARY_SI_MULTIPLIERS:
+        total_bytes = num * BINARY_SI_MULTIPLIERS[suffix]
+        if total_bytes > MAX_MEMORY_BYTES:
+            raise ValueError(f"Memory quantity exceeds cluster limit (1 Exabyte): '{raw_quantity}'.")
+        return ("memory", total_bytes, "binary_si")
 
-    kb = round(total_bytes / 1000, 2)
-    mb = round(total_bytes / 1_000_000, 2)
-    gb = round(total_bytes / 1_000_000_000, 3)
+    # Case 4: Exact Decimal SI memory suffixes (k, K, M, G, T, P, E)
+    if suffix in DECIMAL_SI_MULTIPLIERS:
+        total_bytes = num * DECIMAL_SI_MULTIPLIERS[suffix]
+        if total_bytes > MAX_MEMORY_BYTES:
+            raise ValueError(f"Memory quantity exceeds cluster limit (1 Exabyte): '{raw_quantity}'.")
+        return ("memory", total_bytes, "decimal_si")
+
+    # Case 5: Unsupported suffix -> reject explicitly
+    raise ValueError(
+        f"Unsupported Kubernetes quantity suffix '{suffix}' in '{raw_quantity}'. "
+        "Supported CPU suffixes: 'm' (millicores) or plain cores. "
+        "Supported Memory binary SI suffixes: Ki, Mi, Gi, Ti, Pi, Ei (base 1024). "
+        "Supported Memory decimal SI suffixes: k, M, G, T, P, E (base 1000)."
+    )
+
+
+def _build_cpu_payload(
+    raw_quantity: str,
+    cores: Decimal,
+    suffix_system: str,
+    target_unit: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build structured conversion dictionary for a parsed CPU quantity."""
+    millicores = cores * Decimal("1000")
+    cores_str = _format_decimal(cores, max_places=6)
+    milli_str = _format_decimal(millicores, max_places=3)
 
     representations = {
-        "bytes": total_bytes,
-        "formatted_bytes": f"{total_bytes:,} bytes",
-        "binary_si": {
-            "Ki": f"{int(kib) if kib.is_integer() else kib}Ki",
-            "Mi": f"{int(mib) if mib.is_integer() else mib}Mi",
-            "Gi": f"{int(gib) if gib.is_integer() else gib}Gi",
-            "Ti": f"{int(tib) if tib.is_integer() else tib}Ti",
-        },
-        "decimal_si": {
-            "K": f"{int(kb) if kb.is_integer() else kb}K",
-            "M": f"{int(mb) if mb.is_integer() else mb}M",
-            "G": f"{int(gb) if gb.is_integer() else gb}G",
-        },
+        "cores": _to_number(cores, max_places=6),
+        "cores_exact": cores_str,
+        "millicores": f"{milli_str}m",
+        "millicores_numeric": _to_number(millicores, max_places=3),
     }
 
-    target_converted = None
+    target_conversion = None
     if target_unit:
         tu = target_unit.strip().lower()
-        if tu in ("b", "byte", "bytes"):
-            target_converted = f"{total_bytes:,} bytes"
-        elif tu in ("ki", "kib"):
-            target_converted = f"{kib} Ki"
-        elif tu in ("mi", "mib"):
-            target_converted = f"{mib} Mi"
-        elif tu in ("gi", "gib"):
-            target_converted = f"{gib} Gi"
-        elif tu in ("ti", "tib"):
-            target_converted = f"{tib} Ti"
-        elif tu in ("k", "kb"):
-            target_converted = f"{kb} K"
-        elif tu in ("m", "mb"):
-            target_converted = f"{mb} M"
-        elif tu in ("g", "gb"):
-            target_converted = f"{gb} G"
+        if tu in ("m", "millicore", "millicores"):
+            target_conversion = f"{milli_str}m"
+        elif tu in ("c", "core", "cores"):
+            unit_label = "core" if cores == Decimal("1") else "cores"
+            target_conversion = f"{cores_str} {unit_label}"
         else:
-            target_converted = f"{mib} Mi"
+            raise ValueError(
+                f"Unsupported target_unit '{target_unit}' for CPU quantity. "
+                "Supported CPU target units: 'cores', 'm'."
+            )
 
+    core_word = "core" if cores == Decimal("1") else "cores"
     explanation = (
-        f"{quantity} Memory is equivalent to {total_bytes:,} bytes ({mib} Mi or {gib} Gi). "
-        f"Kubernetes binary SI units (Ki, Mi, Gi) use base-2 (1024-based) multipliers, "
-        f"whereas decimal units (K, M, G) use base-10 (1000-based) multipliers."
+        f"{raw_quantity} CPU equals {cores_str} {core_word} ({milli_str}m / {milli_str} millicores). "
+        "In Kubernetes, 1 CPU core is strictly equal to 1000m (1000 millicores)."
     )
 
     return {
         "tool": "k8s_quantity_converter",
-        "input": quantity,
-        "resource_type": "memory",
-        "canonical_value": f"{total_bytes:,} bytes",
+        "input": raw_quantity,
+        "resource_type": "cpu",
+        "unit_system": suffix_system,
+        "canonical_value": f"{cores_str} {core_word}",
+        "canonical_numeric": _to_number(cores, max_places=6),
         "representations": representations,
-        "target_conversion": target_converted,
+        "target_conversion": target_conversion,
         "explanation": explanation,
         "success": True,
     }
 
 
-def k8s_quantity_converter(quantity: str, target_unit: Optional[str] = None) -> Dict[str, Any]:
-    """Convert Kubernetes CPU or Memory quantity into standard canonical representations.
+def _build_memory_payload(
+    raw_quantity: str,
+    total_bytes: Decimal,
+    suffix_system: str,
+    target_unit: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build structured conversion dictionary for a parsed Memory quantity."""
+    bytes_int = int(total_bytes.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+    kib = total_bytes / BINARY_SI_MULTIPLIERS["Ki"]
+    mib = total_bytes / BINARY_SI_MULTIPLIERS["Mi"]
+    gib = total_bytes / BINARY_SI_MULTIPLIERS["Gi"]
+    tib = total_bytes / BINARY_SI_MULTIPLIERS["Ti"]
+
+    kb = total_bytes / DECIMAL_SI_MULTIPLIERS["k"]
+    mb = total_bytes / DECIMAL_SI_MULTIPLIERS["M"]
+    gb = total_bytes / DECIMAL_SI_MULTIPLIERS["G"]
+    tb = total_bytes / DECIMAL_SI_MULTIPLIERS["T"]
+
+    representations = {
+        "bytes": bytes_int,
+        "formatted_bytes": f"{bytes_int:,} bytes",
+        "binary_si": {
+            "Ki": f"{_format_decimal(kib, 4)}Ki",
+            "Mi": f"{_format_decimal(mib, 4)}Mi",
+            "Gi": f"{_format_decimal(gib, 6)}Gi",
+            "Ti": f"{_format_decimal(tib, 6)}Ti",
+            "Mi_numeric": _to_number(mib, 4),
+            "Gi_numeric": _to_number(gib, 6),
+        },
+        "decimal_si": {
+            "k": f"{_format_decimal(kb, 4)}k",
+            "M": f"{_format_decimal(mb, 4)}M",
+            "G": f"{_format_decimal(gb, 6)}G",
+            "T": f"{_format_decimal(tb, 6)}T",
+            "M_numeric": _to_number(mb, 4),
+            "G_numeric": _to_number(gb, 6),
+        },
+    }
+
+    target_conversion = None
+    if target_unit:
+        tu = target_unit.strip()
+        tu_lower = tu.lower()
+        if tu_lower in ("b", "byte", "bytes"):
+            target_conversion = f"{bytes_int:,} bytes"
+        elif tu_lower in ("ki", "kib"):
+            target_conversion = f"{_format_decimal(kib, 4)} Ki"
+        elif tu_lower in ("mi", "mib"):
+            target_conversion = f"{_format_decimal(mib, 4)} Mi"
+        elif tu_lower in ("gi", "gib"):
+            target_conversion = f"{_format_decimal(gib, 6)} Gi"
+        elif tu_lower in ("ti", "tib"):
+            target_conversion = f"{_format_decimal(tib, 6)} Ti"
+        elif tu_lower in ("k", "kb"):
+            target_conversion = f"{_format_decimal(kb, 4)} k"
+        elif tu_lower in ("m", "mb"):
+            target_conversion = f"{_format_decimal(mb, 4)} M"
+        elif tu_lower in ("g", "gb"):
+            target_conversion = f"{_format_decimal(gb, 6)} G"
+        elif tu_lower in ("t", "tb"):
+            target_conversion = f"{_format_decimal(tb, 6)} T"
+        else:
+            raise ValueError(
+                f"Unsupported target_unit '{target_unit}' for Memory quantity. "
+                "Supported Memory target units: bytes, Ki, Mi, Gi, Ti, k, M, G, T."
+            )
+
+    mib_str = _format_decimal(mib, 4)
+    gib_str = _format_decimal(gib, 6)
+    gb_str = _format_decimal(gb, 6)
+    system_note = (
+        "binary SI (base 1024: 1Gi = 1024Mi = 1,073,741,824 bytes)"
+        if suffix_system == "binary_si"
+        else "decimal SI (base 1000: 1G = 1,000,000,000 bytes)"
+        if suffix_system == "decimal_si"
+        else "raw bytes"
+    )
+    explanation = (
+        f"{raw_quantity} Memory ({system_note}) equals {bytes_int:,} bytes "
+        f"({mib_str} Mi / {gib_str} Gi binary, or {gb_str} G decimal)."
+    )
+
+    return {
+        "tool": "k8s_quantity_converter",
+        "input": raw_quantity,
+        "resource_type": "memory",
+        "unit_system": suffix_system,
+        "canonical_value": f"{bytes_int:,} bytes",
+        "canonical_numeric": bytes_int,
+        "representations": representations,
+        "target_conversion": target_conversion,
+        "explanation": explanation,
+        "success": True,
+    }
+
+
+def compare_k8s_quantities(quantity_a: str, quantity_b: str) -> Dict[str, Any]:
+    """Deterministically compare two Kubernetes quantities using exact Decimal arithmetic."""
+    type_a, val_a, sys_a = _classify_and_parse_quantity(quantity_a)
+    type_b, val_b, sys_b = _classify_and_parse_quantity(quantity_b, hint_type=type_a)
+
+    if type_a != type_b:
+        raise ValueError(
+            f"Cannot compare incompatible resource types: '{quantity_a}' ({type_a}) vs. "
+            f"'{quantity_b}' ({type_b}). Both quantities must be CPU or both Memory."
+        )
+
+    diff = val_a - val_b
+    if diff > 0:
+        relation = "greater_than"
+        symbol = ">"
+    elif diff < 0:
+        relation = "less_than"
+        symbol = "<"
+    else:
+        relation = "equal"
+        symbol = "=="
+
+    ratio = _to_number(val_a / val_b, max_places=6) if val_b != 0 else None
+
+    if type_a == "cpu":
+        diff_milli = diff * Decimal("1000")
+        summary = (
+            f"{quantity_a} ({_format_decimal(val_a)} cores) is {relation.replace('_', ' ')} "
+            f"{quantity_b} ({_format_decimal(val_b)} cores) [{quantity_a} {symbol} {quantity_b}]. "
+            f"Difference: {_format_decimal(abs(diff))} cores ({_format_decimal(abs(diff_milli), 3)}m)."
+        )
+        return {
+            "quantity_a": quantity_a,
+            "quantity_b": quantity_b,
+            "resource_type": "cpu",
+            "relation": relation,
+            "symbol": symbol,
+            "value_a_cores": _to_number(val_a),
+            "value_b_cores": _to_number(val_b),
+            "difference_cores": _to_number(diff),
+            "difference_millicores": _to_number(diff_milli, 3),
+            "ratio": ratio,
+            "summary": summary,
+        }
+
+    # Memory comparison
+    bytes_a = int(val_a.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    bytes_b = int(val_b.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    diff_bytes = bytes_a - bytes_b
+    diff_mib = abs(diff) / BINARY_SI_MULTIPLIERS["Mi"]
+
+    summary = (
+        f"{quantity_a} ({bytes_a:,} bytes, {sys_a}) is {relation.replace('_', ' ')} "
+        f"{quantity_b} ({bytes_b:,} bytes, {sys_b}) [{quantity_a} {symbol} {quantity_b}]. "
+        f"Difference: {abs(diff_bytes):,} bytes ({_format_decimal(diff_mib, 4)} Mi)."
+    )
+    return {
+        "quantity_a": quantity_a,
+        "quantity_b": quantity_b,
+        "resource_type": "memory",
+        "relation": relation,
+        "symbol": symbol,
+        "value_a_bytes": bytes_a,
+        "value_b_bytes": bytes_b,
+        "difference_bytes": diff_bytes,
+        "difference_mib": _to_number(diff_mib, 4),
+        "ratio": ratio,
+        "summary": summary,
+    }
+
+
+def k8s_quantity_converter(
+    quantity: str,
+    target_unit: Optional[str] = None,
+    compare_to: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Convert and optionally compare Kubernetes CPU or Memory quantities deterministically.
+
+    Uses exact `decimal.Decimal` arithmetic with strict distinction between binary SI
+    (Ki/Mi/Gi/Ti, base 1024) and decimal SI (k/M/G/T, base 1000) suffixes.
 
     Args:
-        quantity: A Kubernetes resource quantity string (e.g. '500m', '2', '128Mi', '2Gi').
-        target_unit: Optional target unit representation ('cores', 'm', 'Mi', 'Gi', 'bytes').
+        quantity: Primary Kubernetes resource quantity (e.g., '500m', '1000m', '2', '512Mi', '1Gi', '1G').
+        target_unit: Optional desired output unit (e.g., 'cores', 'm', 'Mi', 'Gi', 'bytes', 'G').
+        compare_to: Optional second Kubernetes quantity to compare against (e.g., '1G', '1').
 
     Returns:
-        Structured dictionary containing parsed type, canonical value, representations, and explanation.
+        Structured dictionary with canonical values, unit conversions, optional comparison,
+        explanation, and boolean success flag.
     """
-    if not quantity or not isinstance(quantity, str) or not quantity.strip():
+    if not isinstance(quantity, str) or not quantity.strip():
         return {
             "tool": "k8s_quantity_converter",
             "input": quantity,
@@ -230,41 +424,38 @@ def k8s_quantity_converter(quantity: str, target_unit: Optional[str] = None) -> 
         }
 
     q = quantity.strip()
-    logger.info("Executing k8s_quantity_converter for '%s' (target_unit=%s)", q, target_unit)
+    logger.info(
+        "Executing k8s_quantity_converter: quantity='%s', target_unit=%s, compare_to=%s",
+        q,
+        target_unit,
+        compare_to,
+    )
 
-    # Determine whether CPU or Memory:
-    # CPU indicators: ends with 'm' (millicores) or explicitly specifies cores / cpu
-    # Memory indicators: contains Ki, Mi, Gi, Ti, Pi, Ei, or decimal K, M, G (or ends in b/bytes)
-    is_cpu = False
-    lower = q.lower()
-
-    if re.search(r"\b(cpu|cores?|millicores?)\b", lower):
-        is_cpu = True
-    elif re.search(r"^[0-9]+(?:\.[0-9]+)?\s*m$", q):
-        # Kubernetes CPU millicores are strictly lowercase 'm' (e.g. 500m)
-        is_cpu = True
-    elif target_unit and target_unit.lower() in ("cores", "core", "c", "m", "millicores"):
-        is_cpu = True
-    elif re.search(r"(ki|mi|gi|ti|pi|ei|kb|mb|gb|bytes)", lower) or q.endswith(("M", "G", "T", "P", "E", "K")):
-        # Kubernetes decimal memory suffixes are uppercase (e.g. 100M = 100 Megabytes)
-        is_cpu = False
-    elif q.endswith("m") and not lower.endswith("mi"):
-        is_cpu = True
-    elif re.match(r"^[0-9]+(?:\.[0-9]+)?$", q):
-        # Plain number: if <= 128, typically CPU cores; if larger, bytes
-        val = float(q)
-        if val <= 64:
-            is_cpu = True
-        else:
-            is_cpu = False
+    # Infer type hint if target_unit clearly indicates CPU or Memory
+    hint_type: Optional[str] = None
+    if target_unit:
+        tu_lower = target_unit.strip().lower()
+        if tu_lower in ("core", "cores", "c", "millicore", "millicores"):
+            hint_type = "cpu"
+        elif tu_lower in ("b", "byte", "bytes", "ki", "kib", "mi", "mib", "gi", "gib", "ti", "tib", "kb", "mb", "gb"):
+            hint_type = "memory"
 
     try:
-        if is_cpu:
-            return _parse_cpu_quantity(q, target_unit)
+        resource_type, canonical_val, suffix_system = _classify_and_parse_quantity(q, hint_type=hint_type)
+
+        if resource_type == "cpu":
+            payload = _build_cpu_payload(q, canonical_val, suffix_system, target_unit=target_unit)
         else:
-            return _parse_memory_quantity(q, target_unit)
+            payload = _build_memory_payload(q, canonical_val, suffix_system, target_unit=target_unit)
+
+        if compare_to is not None and str(compare_to).strip():
+            comparison = compare_k8s_quantities(q, str(compare_to).strip())
+            payload["comparison"] = comparison
+            payload["explanation"] = f"{payload['explanation']} {comparison['summary']}"
+
+        return payload
     except Exception as exc:
-        logger.warning("k8s_quantity_converter failed for '%s': %s", q, exc)
+        logger.warning("k8s_quantity_converter validation/conversion error for '%s': %s", q, exc)
         return {
             "tool": "k8s_quantity_converter",
             "input": quantity,
@@ -274,183 +465,257 @@ def k8s_quantity_converter(quantity: str, target_unit: Optional[str] = None) -> 
 
 
 # ---------------------------------------------------------------------------
-# Tool 2: k8s_rag_search (Official Documentation Retrieval & Grounding)
+# Tool A: k8s_rag_search (Official Documentation Retrieval & Grounding)
 # ---------------------------------------------------------------------------
 
 def k8s_rag_search(query: str, top_k: int = 3) -> Dict[str, Any]:
-    """Retrieve official Kubernetes documentation and synthesize an authoritative answer.
+    """Search the Kubernetes knowledge base via the existing Day 8 RAG pipeline.
+
+    Preserves document title, source URL, page, and chunk metadata, and explicitly
+    reports insufficient context when the documentation cannot answer the question.
 
     Args:
-        query: User's Kubernetes conceptual or command question.
-        top_k: Number of relevant documentation chunks to retrieve (default: 3).
+        query: Natural-language Kubernetes concept or kubectl command question.
+        top_k: Number of chunks to retrieve from ChromaDB (1 to 10, default 3).
 
     Returns:
-        Structured dictionary containing answer, citations, confidence, and context sufficiency.
+        Structured dictionary with answer, citations, confidence, and context_sufficient.
     """
-    if not query or not isinstance(query, str) or not query.strip():
+    if not isinstance(query, str) or not query.strip():
         return {
             "tool": "k8s_rag_search",
             "query": query,
             "error": "Query parameter must be a non-empty string.",
+            "citations": [],
+            "context_sufficient": False,
             "success": False,
         }
 
-    try:
-        k = int(top_k)
-        if k < 1 or k > 10:
-            k = 3
-    except (ValueError, TypeError):
-        k = 3
+    if isinstance(top_k, bool) or not isinstance(top_k, int):
+        try:
+            top_k = int(top_k)
+        except (ValueError, TypeError):
+            return {
+                "tool": "k8s_rag_search",
+                "query": query.strip(),
+                "error": "top_k must be an integer between 1 and 10.",
+                "citations": [],
+                "context_sufficient": False,
+                "success": False,
+            }
 
-    logger.info("Executing k8s_rag_search for '%s' (top_k=%d)", query.strip(), k)
-    try:
-        rag_output = execute_rag_pipeline(question=query.strip(), top_k=k)
-        rag_dict = rag_output.to_dict() if hasattr(rag_output, "to_dict") else dict(rag_output)
+    if top_k < 1 or top_k > 10:
         return {
             "tool": "k8s_rag_search",
             "query": query.strip(),
+            "error": f"top_k must be between 1 and 10 (received {top_k}).",
+            "citations": [],
+            "context_sufficient": False,
+            "success": False,
+        }
+
+    clean_query = query.strip()
+    logger.info("Executing k8s_rag_search: query='%s', top_k=%d", clean_query, top_k)
+
+    try:
+        rag_result = execute_rag_pipeline(question=clean_query, top_k=top_k)
+        rag_dict = rag_result.to_dict() if hasattr(rag_result, "to_dict") else dict(rag_result)
+        context_sufficient = bool(rag_dict.get("context_sufficient", False))
+        citations = rag_dict.get("citations", []) if context_sufficient else []
+
+        return {
+            "tool": "k8s_rag_search",
+            "query": clean_query,
             "answer": rag_dict.get("answer", ""),
-            "citations": rag_dict.get("citations", []),
+            "citations": citations,
             "confidence": rag_dict.get("confidence", "low"),
-            "context_sufficient": rag_dict.get("context_sufficient", False),
-            "sources_count": len(rag_dict.get("citations", [])),
+            "context_sufficient": context_sufficient,
+            "sources_count": len(citations),
             "retrieval_method": "vector_semantic",
             "success": True,
         }
     except Exception as exc:
-        logger.error("k8s_rag_search failed for query '%s': %s", query, exc)
+        logger.error("k8s_rag_search execution error for '%s': %s", clean_query, exc)
         return {
             "tool": "k8s_rag_search",
-            "query": query,
-            "error": str(exc),
+            "query": clean_query,
+            "error": f"RAG search failed: {exc}",
+            "citations": [],
+            "context_sufficient": False,
             "success": False,
         }
 
 
 # ---------------------------------------------------------------------------
-# Tool Schemas & Registry (OpenAI / LangChain Compatible)
+# Tool Schemas, Registry, Argument Validation & Safe Dispatcher
 # ---------------------------------------------------------------------------
 
 TOOL_SCHEMAS: List[Dict[str, Any]] = [
     {
         "name": "k8s_rag_search",
         "description": (
-            "Retrieve official Kubernetes documentation and generate an authoritative, "
-            "citation-backed answer for conceptual questions, kubectl commands, and cluster architecture."
+            "Search the official Kubernetes documentation knowledge base using RAG. "
+            "Returns grounded explanations, kubectl commands, and verifiable source citations "
+            "(title, URL, page), or an explicit insufficient-context result when unavailable."
         ),
+        "requires_approval": False,
         "parameters": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "The Kubernetes concept, kubectl command, or question to research.",
+                    "description": "The Kubernetes concept, object, or kubectl command question to search.",
                 },
                 "top_k": {
                     "type": "integer",
-                    "description": "Number of documentation chunks to retrieve (default: 3, max: 10).",
+                    "description": "Number of relevant documentation chunks to retrieve (1-10, default: 3).",
                     "default": 3,
                 },
             },
             "required": ["query"],
+            "additionalProperties": False,
         },
     },
     {
         "name": "k8s_quantity_converter",
         "description": (
-            "Convert Kubernetes resource quantities (CPU millicores/cores, Memory bytes/Ki/Mi/Gi/Ti/K/M/G) "
-            "into standard canonical units and human-readable formats. "
-            "Note: In production workflows, this tool requires human approval before execution."
+            "Deterministically parse, convert, and compare Kubernetes CPU (m, cores) and Memory "
+            "(Ki, Mi, Gi, Ti, Pi, Ei binary SI vs. k, M, G, T, P, E decimal SI) resource quantities "
+            "using exact Decimal arithmetic. Requires human approval in LangGraph workflows."
         ),
+        "requires_approval": True,
         "parameters": {
             "type": "object",
             "properties": {
                 "quantity": {
                     "type": "string",
-                    "description": "The Kubernetes resource quantity string (e.g., '500m', '2', '128Mi', '2Gi', '100M').",
+                    "description": "Primary Kubernetes quantity string (e.g., '500m', '2', '512Mi', '1Gi', '1G').",
                 },
                 "target_unit": {
                     "type": "string",
-                    "description": "Optional desired unit to convert into (e.g., 'cores', 'm', 'Mi', 'Gi', 'bytes').",
+                    "description": "Optional output unit (e.g., 'cores', 'm', 'Mi', 'Gi', 'bytes', 'G').",
+                },
+                "compare_to": {
+                    "type": "string",
+                    "description": "Optional second Kubernetes quantity to compare against (e.g., '1', '1G', '1Gi').",
                 },
             },
             "required": ["quantity"],
+            "additionalProperties": False,
         },
     },
 ]
 
-TOOL_REGISTRY = {
+TOOL_REGISTRY: Dict[str, Callable[..., Dict[str, Any]]] = {
     "k8s_rag_search": k8s_rag_search,
     "k8s_quantity_converter": k8s_quantity_converter,
 }
 
 
 def get_tool_schema(name: str) -> Optional[Dict[str, Any]]:
-    """Retrieve schema definition for a registered tool."""
+    """Return the JSON schema descriptor for a registered tool, or None if unregistered."""
     for schema in TOOL_SCHEMAS:
         if schema["name"] == name:
             return schema
     return None
 
 
-def execute_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-    """Safely dispatch and execute a tool by name with strict validation.
-
-    Args:
-        name: The registered tool name.
-        arguments: Dictionary of arguments matching the tool's schema.
+def validate_tool_call(name: str, arguments: Any) -> Tuple[bool, Optional[str]]:
+    """Validate that a tool is registered and its arguments conform to its schema.
 
     Returns:
-        Structured tool execution dictionary with success flag.
+        Tuple of (is_valid, error_message).
     """
     if not isinstance(name, str) or not name.strip():
+        return (False, "Tool name must be a non-empty string.")
+
+    tool_name = name.strip()
+    if tool_name not in TOOL_REGISTRY:
+        return (
+            False,
+            f"Tool '{tool_name}' is not registered. Available tools: {list(TOOL_REGISTRY.keys())}",
+        )
+
+    if not isinstance(arguments, dict):
+        return (
+            False,
+            f"Tool arguments must be a dictionary, received {type(arguments).__name__}.",
+        )
+
+    schema = get_tool_schema(tool_name)
+    if not schema:
+        return (False, f"Schema definition missing for tool '{tool_name}'.")
+
+    params_schema = schema.get("parameters", {})
+    allowed_props = params_schema.get("properties", {})
+    required_keys = params_schema.get("required", [])
+
+    # Check unknown arguments
+    unknown_keys = [k for k in arguments.keys() if k not in allowed_props]
+    if unknown_keys:
+        return (
+            False,
+            f"Unexpected argument(s) for tool '{tool_name}': {unknown_keys}. "
+            f"Allowed arguments: {list(allowed_props.keys())}",
+        )
+
+    # Check required arguments
+    missing_keys = [
+        k for k in required_keys
+        if k not in arguments or arguments[k] is None or (isinstance(arguments[k], str) and not arguments[k].strip())
+    ]
+    if missing_keys:
+        return (
+            False,
+            f"Missing required argument(s) for tool '{tool_name}': {missing_keys}.",
+        )
+
+    # Basic type validation against schema
+    for key, val in arguments.items():
+        if val is None:
+            continue
+        expected_type = allowed_props[key].get("type")
+        if expected_type == "string" and not isinstance(val, str):
+            return (
+                False,
+                f"Argument '{key}' for tool '{tool_name}' must be a string, got {type(val).__name__}.",
+            )
+        if expected_type == "integer" and (isinstance(val, bool) or not isinstance(val, int)):
+            return (
+                False,
+                f"Argument '{key}' for tool '{tool_name}' must be an integer, got {type(val).__name__}.",
+            )
+
+    return (True, None)
+
+
+def execute_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Safely validate and execute a registered read-only tool.
+
+    Args:
+        name: Registered tool name.
+        arguments: Dictionary of arguments matching the tool schema.
+
+    Returns:
+        Structured dictionary with execution output and boolean `success` key.
+    """
+    is_valid, error_msg = validate_tool_call(name, arguments)
+    if not is_valid:
+        logger.warning("Tool call validation failed for '%s': %s", name, error_msg)
         return {
             "tool": str(name),
-            "error": "Tool name must be a non-empty string.",
+            "error": error_msg,
             "success": False,
         }
 
     tool_name = name.strip()
-    if tool_name not in TOOL_REGISTRY:
-        return {
-            "tool": tool_name,
-            "error": f"Tool '{tool_name}' not found. Available tools: {list(TOOL_REGISTRY.keys())}",
-            "success": False,
-        }
-
-    if not isinstance(arguments, dict):
-        return {
-            "tool": tool_name,
-            "error": f"Tool arguments must be a dictionary, received {type(arguments).__name__}.",
-            "success": False,
-        }
-
     func = TOOL_REGISTRY[tool_name]
-    schema = get_tool_schema(tool_name)
-
-    # Validate required arguments
-    if schema and "parameters" in schema:
-        required_keys = schema["parameters"].get("required", [])
-        missing = [k for k in required_keys if k not in arguments or arguments[k] is None]
-        if missing:
-            return {
-                "tool": tool_name,
-                "error": f"Missing required arguments for tool '{tool_name}': {missing}",
-                "success": False,
-            }
-
     try:
         return func(**arguments)
-    except TypeError as te:
-        logger.warning("Argument mismatch executing '%s' with %s: %s", tool_name, arguments, te)
-        return {
-            "tool": tool_name,
-            "error": f"Invalid arguments for tool '{tool_name}': {te}",
-            "success": False,
-        }
     except Exception as exc:
-        logger.error("Execution error in tool '%s': %s", tool_name, exc)
+        logger.error("Unexpected execution error in tool '%s': %s", tool_name, exc)
         return {
             "tool": tool_name,
-            "error": f"Error executing tool '{tool_name}': {exc}",
+            "error": f"Tool execution failed for '{tool_name}': {exc}",
             "success": False,
         }

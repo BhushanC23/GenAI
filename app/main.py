@@ -17,8 +17,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# Initialize ChromaDB and HNSW vector runtime before other C-extensions (e.g. scikit-learn / OpenMP)
-import hnswlib
+# Initialize ChromaDB and optional HNSW runtime before other C-extensions (e.g. scikit-learn / OpenMP)
+try:
+    import hnswlib  # noqa: F401
+except ImportError:
+    pass
 import chromadb
 from app.vectorstore import VectorStoreError, get_vector_store
 
@@ -187,23 +190,39 @@ class AskResponse(BaseModel):
 
 
 class AgentRequest(BaseModel):
-    """Schema for incoming AI Agent request."""
+    """Schema for incoming AI Agent request or approval resume via POST /agent."""
 
-    question: str = Field(
-        ...,
-        min_length=1,
+    question: Optional[str] = Field(
+        default=None,
         max_length=2000,
-        description="The Kubernetes inquiry, kubectl command, or quantity conversion request.",
+        description="The Kubernetes inquiry, kubectl command, or quantity conversion request. Optional when resuming an interrupted approval with session_id + approved.",
         example="Convert 500m CPU to cores",
     )
     session_id: Optional[str] = Field(
         default=None,
-        description="Optional persistent session identifier for multi-turn conversation memory.",
+        description="Optional persistent thread/session identifier for LangGraph MemorySaver.",
         example="sess-a1b2c3d4",
     )
     approved: Optional[bool] = Field(
         default=None,
-        description="Approval status (True/False/None) for operations requiring human-in-the-loop verification.",
+        description="Human approval response (true/false) when resuming a paused LangGraph interrupt.",
+        example=True,
+    )
+
+
+class AgentApprovalRequest(BaseModel):
+    """Schema for dedicated human-in-the-loop approval resume endpoint (POST /agent/approve)."""
+
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="Session ID currently paused awaiting human approval.",
+        example="sess-a1b2c3d4",
+    )
+    approved: bool = Field(
+        ...,
+        description="True to approve and execute the proposed tool; False to reject cleanly.",
         example=True,
     )
 
@@ -212,13 +231,15 @@ class AgentResponse(BaseModel):
     """Schema for AI Agent execution response."""
 
     question: str = Field(..., description="The user question or request.")
-    answer: str = Field(..., description="Synthesized answer or approval request message.")
-    tool_calls: List[Dict[str, Any]] = Field(default_factory=list, description="List of tools invoked or pending.")
-    citations: List[Dict[str, Any]] = Field(default_factory=list, description="Official documentation citations.")
-    session_id: str = Field(..., description="Session identifier for continuing the conversation.")
-    approval_required: bool = Field(..., description="Whether execution is paused awaiting human approval.")
-    approval_status: Optional[str] = Field(default=None, description="Current approval status: pending, approved, or rejected.")
-    pending_tool: Optional[Dict[str, Any]] = Field(default=None, description="Details of tool awaiting approval.")
+    answer: str = Field(..., description="Synthesized grounded answer or approval prompt/rejection message.")
+    tool_calls: List[Dict[str, Any]] = Field(default_factory=list, description="Ordered list of executed tool calls.")
+    citations: List[Dict[str, Any]] = Field(default_factory=list, description="Official Kubernetes documentation citations.")
+    session_id: str = Field(..., description="Session/thread identifier for multi-turn memory and resume.")
+    approval_required: bool = Field(..., description="Whether LangGraph execution is currently paused awaiting approval.")
+    approval_status: str = Field(default="not_required", description="Approval status: not_required, pending, approved, or rejected.")
+    pending_tool: Optional[Dict[str, Any]] = Field(default=None, description="Proposed tool name and exact arguments awaiting approval.")
+    execution_trace: List[Dict[str, Any]] = Field(default_factory=list, description="Structured step-by-step execution trace.")
+    iteration_count: int = Field(default=0, description="Number of reasoning cycles executed in this turn.")
     success: bool = Field(default=True, description="Whether the request succeeded.")
 
 
@@ -234,6 +255,7 @@ def root() -> Dict[str, str]:
         "chat_url": "/chat",
         "ask_url": "/ask",
         "agent_url": "/agent",
+        "agent_approve_url": "/agent/approve",
     }
 
 
@@ -580,6 +602,23 @@ def ask_kubecoach_rag(payload: AskRequest) -> AskResponse:
         )
 
 
+def _build_agent_response(result: Dict[str, Any], fallback_question: str = "") -> AgentResponse:
+    """Convert raw LangGraph response dict to validated AgentResponse schema."""
+    return AgentResponse(
+        question=result.get("question", fallback_question),
+        answer=result.get("answer", ""),
+        tool_calls=result.get("tool_calls", []),
+        citations=result.get("citations", []),
+        session_id=result.get("session_id", ""),
+        approval_required=bool(result.get("approval_required", False)),
+        approval_status=str(result.get("approval_status") or "not_required"),
+        pending_tool=result.get("pending_tool"),
+        execution_trace=result.get("execution_trace", []),
+        iteration_count=int(result.get("iteration_count", 0)),
+        success=bool(result.get("success", True)),
+    )
+
+
 @app.post(
     "/agent",
     response_model=AgentResponse,
@@ -587,50 +626,106 @@ def ask_kubecoach_rag(payload: AskRequest) -> AskResponse:
     tags=["Agent"],
 )
 def run_kubecoach_agent_endpoint(payload: AgentRequest) -> AgentResponse:
-    """Execute the KubeCoach autonomous agent workflow with LangGraph.
+    """Execute or resume the KubeCoach LangGraph stateful agent workflow.
 
-    Supports autonomous tool execution (RAG documentation search), human-in-the-loop
-    approval for quantity conversions, and conversational session memory.
+    Supports:
+    - Autonomous RAG documentation retrieval with verifiable citations.
+    - Human-in-the-loop interrupt/resume approval for `k8s_quantity_converter`.
+    - Persistent, isolated multi-turn memory via LangGraph `MemorySaver`.
     """
-    question_text = payload.question.strip()
-    if not question_text:
+    question_text = (payload.question or "").strip()
+    session_id = payload.session_id.strip() if payload.session_id and payload.session_id.strip() else None
+
+    # Allow resuming a paused approval without repeating the question
+    is_resume_only = (not question_text) and (session_id is not None) and (payload.approved is not None)
+    if not question_text and not is_resume_only:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Question cannot be empty or whitespace only.",
+            detail="Question cannot be empty or whitespace only (unless resuming an approval with session_id and approved).",
         )
 
     logger.info(
-        "Agent request received: '%s' (session_id=%s, approved=%s)",
+        "Agent request received: question='%s', session_id=%s, approved=%s",
         question_text,
-        payload.session_id,
+        session_id,
         payload.approved,
     )
 
     try:
-        from app.graph import run_agent
+        from app.graph import has_pending_approval, resume_agent_approval, run_agent
 
-        result = run_agent(
-            question=question_text,
-            session_id=payload.session_id,
-            approved=payload.approved,
+        if is_resume_only:
+            if not has_pending_approval(session_id):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"No pending human approval found for session_id '{session_id}'.",
+                )
+            result = resume_agent_approval(session_id=session_id, approved=bool(payload.approved))
+        else:
+            result = run_agent(
+                question=question_text,
+                session_id=session_id,
+                approved=payload.approved,
+            )
+
+        return _build_agent_response(result, fallback_question=question_text)
+
+    except HTTPException:
+        raise
+    except ValueError as val_err:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(val_err),
         )
-
-        return AgentResponse(
-            question=result.get("question", question_text),
-            answer=result.get("answer", ""),
-            tool_calls=result.get("tool_calls", []),
-            citations=result.get("citations", []),
-            session_id=result.get("session_id", ""),
-            approval_required=result.get("approval_required", False),
-            approval_status=result.get("approval_status"),
-            pending_tool=result.get("pending_tool"),
-            success=result.get("success", True),
-        )
-
     except Exception as exc:
         logger.exception("Error executing /agent endpoint: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error executing agent workflow: {exc}",
+            detail="An internal server error occurred while executing the agent workflow.",
         )
+
+
+@app.post(
+    "/agent/approve",
+    response_model=AgentResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Agent"],
+)
+def approve_kubecoach_agent_endpoint(payload: AgentApprovalRequest) -> AgentResponse:
+    """Resume an interrupted KubeCoach LangGraph session with explicit human approval or rejection."""
+    sid = payload.session_id.strip()
+    if not sid:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="session_id cannot be empty or whitespace only.",
+        )
+
+    logger.info("Agent approval decision received: session_id='%s', approved=%s", sid, payload.approved)
+
+    try:
+        from app.graph import has_pending_approval, resume_agent_approval
+
+        if not has_pending_approval(sid):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"No pending human approval found for session_id '{sid}'.",
+            )
+
+        result = resume_agent_approval(session_id=sid, approved=payload.approved)
+        return _build_agent_response(result)
+
+    except HTTPException:
+        raise
+    except ValueError as val_err:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(val_err),
+        )
+    except Exception as exc:
+        logger.exception("Error executing /agent/approve endpoint: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal server error occurred while resuming agent approval.",
+        )
+
 

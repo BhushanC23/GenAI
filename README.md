@@ -219,65 +219,66 @@ Official Kubernetes documentation is extensive and technically dense. Beginners 
   - Added 16 automated unit tests validating RAG execution, citation deduplication, context sufficiency checks, Q6 refusal, empty query handling, `POST /ask` contract/422 validations, and endpoint regression.
   - Project test suite now totals **79 passing unit tests** across Days 3, 4, 6, 7, and 8.
 
-## Day 9 Progress — AI Agents, Tool Calling & LangGraph Workflow
-- **Assigned Developer Tool Identification ([`app/tools.py`](app/tools.py)):**
-  - Discovered project-card assigned tool for **SJ-58 (Developer Tools theme)**: `k8s_quantity_converter`.
-  - Converts Kubernetes CPU quantities (millicores `500m` $\leftrightarrow$ `0.5` cores) and Memory quantities (binary SI `Ki`, `Mi`, `Gi`, `Ti`; decimal SI `K`, `M`, `G`; plain bytes) into normalized canonical values and human-readable explanations.
-  - Implements strict validation and safety bounds: rejects negative numbers, malformed syntax, and quantities exceeding cluster bounds ($> 10,000,000$ cores or $> 10^{18}$ bytes).
-- **Safe Read-Only Tool Registry & Dispatcher:**
-  - Registered two read-only tools:
-    1. `k8s_rag_search`: Retrieval-Augmented Generation over official Kubernetes docs with citation tracking and confidence scoring.
-    2. `k8s_quantity_converter`: Resource quantity converter for CPU and memory specs.
-  - Defined OpenAI/LangChain-compatible structured schemas (`TOOL_SCHEMAS`) specifying parameters, types, and descriptions.
-  - Implemented safe dispatcher `execute_tool(name, arguments)` enforcing schema validation, required arguments, and isolated exception handling.
-- **Autonomous Agent Loop ([`app/agent_loop.py`](app/agent_loop.py)):**
-  - Built an educational ReAct-style agent loop: User Query $\rightarrow$ Reasoning Planner $\rightarrow$ Tool Action $\rightarrow$ Observation Recording $\rightarrow$ Final Synthesis.
-  - Added loop iteration guard (`max_iterations=5`) strictly preventing infinite cycles.
-  - Preserves official citations from RAG tool and synthesizes multi-part responses when queries involve multiple steps.
-- **LangGraph Stateful Workflow ([`app/graph.py`](app/graph.py)):**
-  - Modeled state with `AgentState` TypedDict: `messages`, `current_step`, `tool_calls`, `tool_results`, `citations`, `pending_tool`, `approval_required`, `approved`, `final_answer`, `session_id`.
-  - Structured Graph Nodes:
-    - `reasoner`: Evaluates user query and prior conversation history to select appropriate tools or prepare direct answers.
-    - `approval_gate`: Enforces Human-in-the-Loop (HITL) gate for sensitive operations (`k8s_quantity_converter`), requiring explicit human confirmation before execution.
-    - `tool_executor`: Safely executes approved tools via the tool dispatcher.
-    - `synthesizer`: Aggregates observations and produces grounded responses with official citations.
-  - Conditional Edges & Routing:
-    - Dynamic routing from `reasoner` to `approval_gate` or `synthesizer`.
-    - Conditional routing from `approval_gate`: pauses workflow if approval is pending, terminates if rejected, and forwards to `tool_executor` if approved.
-  - Conversational Session Memory: In-memory session checkpointer store keyed by `session_id`, retaining state across turns so approvals can be submitted asynchronously.
-- **Agent Workflow Diagram:**
+## Day 9 Progress — Production AI Agent, Deterministic Tools & LangGraph Workflow
+
+Detailed architectural design and safety analysis: **[`docs/day09_architecture.md`](docs/day09_architecture.md)**
+
+- **Implemented Agent Tools ([`app/tools.py`](app/tools.py)):**
+  - **Tool A — `k8s_rag_search`:** Reuses the existing Day 8 RAG pipeline (`app/rag.py`) and ChromaDB vector store (`app/vectorstore.py`) to answer Kubernetes questions with grounded explanations and verifiable citations (`document_title`, `source_url`, `page`, `chunk_id`). Explicitly reports `context_sufficient: false` with `citations: []` when documentation cannot answer out-of-scope queries.
+  - **Tool B — `k8s_quantity_converter` (Project Card Assigned Tool, SJ-58):** Deterministic Python utility built on `decimal.Decimal` arithmetic (zero LLM math) supporting CPU/Memory conversion, binary SI vs. decimal SI suffix distinction, two-quantity comparison (`compare_to`), and strict schema/input validation.
+  - **Safe Tool Registry & Dispatcher:** `TOOL_SCHEMAS`, `TOOL_REGISTRY`, `validate_tool_call()`, and `execute_tool()` enforce read-only whitelisted dispatch, rejecting unregistered tools, missing/unexpected arguments, wrong types, negative values, unsupported suffixes, and overflow bounds.
+
+- **Verified Quantity Converter Examples (Exact `Decimal` Arithmetic):**
+
+  | Input | Target / Compare | Resource Type | Unit System | Verified Output |
+  | :--- | :--- | :--- | :--- | :--- |
+  | `500m` | default | CPU | millicores | `0.5 cores` (`500m`) |
+  | `1000m` | `cores` | CPU | millicores | `1 core` (`1000m`) |
+  | `2` | `m` | CPU | cores | `2000m` (`2 cores`) |
+  | `512Mi` | default | Memory | binary SI (base 1024) | `536,870,912 bytes` (`512Mi` / `0.5Gi`) |
+  | `1Gi` | `Mi` | Memory | binary SI (base 1024) | `1024 Mi` (`1,073,741,824 bytes`) |
+  | `1G` | `bytes` | Memory | decimal SI (base 1000) | `1,000,000,000 bytes` |
+  | `1Gi` | compare `1G` | Memory | binary vs. decimal | `1Gi > 1G` (difference: `73,741,824 bytes` / `70.3257 Mi`) |
+  | `500m` | compare `1` | CPU | millicores vs. cores | `500m < 1` (difference: `0.5 cores` / `500m`, ratio: `0.5`) |
+
+- **Hand-Written ReAct Agent Loop ([`app/agent_loop.py`](app/agent_loop.py)):**
+  - Explicit step-by-step cycle: `Reason → Select Tool → Validate → Execute → Observe → Reason Again → Final Answer`.
+  - Reuses the Day 6 LLM provider wrapper (`app/llm.py`) with an offline deterministic planner fallback and injectable `planner_fn` for mocked unit tests.
+  - Enforces `max_iterations` (default `5`), preserves RAG citations, isolates tool/provider errors, and records a structured `execution_trace` for debugging and viva explanation.
+
+- **Official LangGraph Stateful Workflow ([`app/graph.py`](app/graph.py)):**
+  - Built with official LangGraph APIs (`langgraph==1.2.22`): `StateGraph`, `START`, `END`, `MemorySaver`, `interrupt`, and `Command`.
+  - **State (`AgentState`):** Tracks `question`, `messages`, `session_id`, `selected_tool`, `tool_arguments`, `tool_output`, `tool_execution_history`, `citations`, `approval_status`, `pending_tool`, `final_answer`, `iteration_count`, and `execution_trace`.
+  - **Nodes & Edges:**
+    - `reasoning_node` $\rightarrow$ routes `k8s_rag_search` directly to `tool_execution_node`, routes `k8s_quantity_converter` to `approval_node`, and routes finished turns to `final_response_node`.
+    - `approval_node` $\rightarrow$ calls LangGraph `interrupt(...)` displaying the exact proposed tool name and arguments; resumes via `Command(resume={"approved": True/False})`.
+    - `tool_execution_node` $\rightarrow$ executes validated tool, captures observation & citations, and loops back to `reasoning_node`.
+    - `final_response_node` $\rightarrow$ synthesizes the grounded response (or clean rejection message), appends the turn to `messages`, and ends at `END`.
+  - **Checkpointer Memory & Session Isolation:** `MemorySaver` persists multi-turn conversation history keyed by `thread_id = session_id`, keeping separate sessions completely isolated.
+
+- **LangGraph Architecture Diagram:**
   ```mermaid
   flowchart TD
-    A["User Request<br/>(POST /agent)"] --> B["Reasoner Node<br/>(Analyze query & history)"]
-    B -- "Tool Required" --> C{"Approval Gate<br/>(HITL Check)"}
-    B -- "Direct Answer" --> D["Synthesizer Node<br/>(Generate Response)"]
-    C -- "Safe Tool (k8s_rag_search)" --> E["Tool Executor Node<br/>(Safe Dispatcher)"]
-    C -- "k8s_quantity_converter<br/>(approved=None)" --> F["Pause Execution<br/>approval_required=True"]
-    C -- "k8s_quantity_converter<br/>(approved=False)" --> G["Rejection Handler<br/>approval_status='rejected'"]
-    C -- "k8s_quantity_converter<br/>(approved=True)" --> E
-    E --> D
-    D --> H["Final Output<br/>Answer + Citations + State"]
-    F --> H
-    G --> H
+    A["User Request<br/>(POST /agent)"] --> B["reasoning_node<br/>(Tool Selection & Planning)"]
+    B -- "k8s_rag_search" --> E["tool_execution_node<br/>(Validated Tool Dispatch)"]
+    B -- "k8s_quantity_converter" --> C["approval_node<br/>(LangGraph interrupt())"]
+    B -- "Final Answer / Max Iters" --> D["final_response_node<br/>(Synthesis + MemorySaver)"]
+    C -- "Paused (Checkpointed)" --> P["Return approval_required=true<br/>+ Tool Name & Exact Args"]
+    P -. "Command(resume=approved)" .-> C
+    C -- "approved=True" --> E
+    C -- "approved=False (Skip Tool)" --> D
+    E -- "Observation + Citations" --> B
+    D --> H["Response JSON<br/>(answer, tool_calls, citations,<br/>session_id, approval_status, trace)"]
   ```
-- **FastAPI Agent Endpoint (`POST /agent` in [`app/main.py`](app/main.py)):**
-  - Accepts `AgentRequest` (`question: str`, optional `session_id: str`, optional `approved: bool`).
-  - Returns `AgentResponse` (`question`, `answer`, `tool_calls`, `citations`, `session_id`, `approval_required`, `approval_status`, `pending_tool`).
-  - Updated root endpoint `GET /` to expose `"agent_url": "/agent"`.
+
+- **FastAPI Agent Endpoints (`POST /agent` & `POST /agent/approve` in [`app/main.py`](app/main.py)):**
+  - `POST /agent`: Executes new queries or resumes an interrupted approval using `session_id` + `approved`.
+  - `POST /agent/approve`: Dedicated validated approval/resume endpoint returning `409 Conflict` if no pending interrupt exists for `session_id`.
+  - Preserves 100% compatibility with `/health`, `/records`, `/records/{id}`, `/search`, `/search/semantic`, `/questions`, `/chat`, and `/ask`.
+
 - **Comprehensive Test Suite ([`tests/test_day09.py`](tests/test_day09.py)):**
-  - Added 23 automated tests covering all 10 required Day 9 scenarios:
-    1. RAG question triggers RAG search tool
-    2. Quantity question triggers converter tool
-    3. Multi-part question triggers both tools
-    4. Invalid tool name handling
-    5. Invalid tool arguments handling
-    6. Tool execution failure handling
-    7. Human approval requested when converter tool selected
-    8. Human approval rejection stops execution cleanly
-    9. Conversation memory retains context across multiple turns
-    10. Iteration limit prevents infinite loops
-    Plus FastAPI `/agent` endpoint contracts and schema inspection.
-  - Project test suite now totals **102 passing unit tests** across Days 3, 4, 6, 7, 8, and 9!
+  - Added **29 automated unit and integration tests** (zero real API key required) covering all 12 quantity converter cases, 6 hand-written agent loop cases, 6 LangGraph interrupt/resume/MemorySaver/isolation/citation cases, and 5 FastAPI integration & regression checks.
+  - **Actual Verified Results (`python -m unittest discover tests -v`):** **108 / 108 tests passing** (`29` Day 9 tests + `79` existing regression tests across Days 3, 4, 6, 7, and 8).
 
 ---
 
@@ -287,21 +288,28 @@ Official Kubernetes documentation is extensive and technically dense. Beginners 
 GenAI/
 ├── app/
 │   ├── __init__.py
+│   ├── agent_loop.py        # Day 9: Hand-written ReAct agent loop with execution trace
 │   ├── chunking.py          # Day 7: Document chunking engine for docs & records
 │   ├── cli.py               # Day 2: Interactive CLI explorer
 │   ├── embed.py             # Day 7: Dense vector embeddings (all-MiniLM-L6-v2 & Mock)
 │   ├── fetch.py             # Day 3: Official Kubernetes docs HTTP fetcher
+│   ├── graph.py             # Day 9: LangGraph StateGraph + MemorySaver + interrupt/resume
 │   ├── ingest.py            # Day 3: Markdown parsing and JSON ingestion pipeline
 │   ├── llm.py               # Day 6: Unified LLM provider wrapper (Groq, Gemini, Mock)
-│   ├── main.py              # Day 4/6/7/8: FastAPI backend (/chat, /search/semantic, /ask)
+│   ├── main.py              # Day 4-9: FastAPI backend (/chat, /ask, /agent, /agent/approve)
 │   ├── models.py            # Day 3: Record dataclass and custom exception types
 │   ├── rag.py               # Day 8: Grounded RAG pipeline with citations & refusal guardrail
 │   ├── records.py           # Day 2/3: Record loading and querying functions
 │   ├── smart_search.py      # Day 4: TF-IDF vectorization & Cosine Similarity search
+│   ├── tools.py             # Day 9: k8s_rag_search & Decimal k8s_quantity_converter tools
 │   └── vectorstore.py       # Day 7: Persistent ChromaDB vector database manager
 ├── analysis/
 │   ├── __init__.py
 │   └── explore.py           # Day 4: Pandas data exploration and insights
+├── docs/
+│   ├── checkpoint_1.md      # Day 5: Checkpoint 1 viva & walkthrough guide
+│   ├── day09_architecture.md # Day 9: Agent, LangGraph, MemorySaver & HITL architecture
+│   └── how_llms_work.md     # Day 5: Beginner-friendly LLM internals guide
 ├── data/
 │   ├── __init__.py
 │   ├── manifest.json        # Fetch metadata provenance (in data/raw/)
@@ -354,7 +362,8 @@ GenAI/
 | `POST` | `/questions` | Submit a student question; appends to `data/questions.json` | `201 Created`, `422 Unprocessable` |
 | `POST` | `/chat` | Chat with KubeCoach LLM assistant; returns structured JSON | `200 OK`, `422 Unprocessable`, `429 Too Many Requests`, `502 Bad Gateway`, `503 Unavailable`, `504 Gateway Timeout` |
 | `POST` | `/ask` | Grounded RAG question answering with verified citations and honest refusal guardrail | `200 OK`, `422 Unprocessable`, `429 Too Many Requests`, `502 Bad Gateway`, `503 Unavailable`, `504 Gateway Timeout` |
-| `POST` | `/agent` | Autonomous AI Agent workflow with LangGraph, RAG documentation retrieval, and HITL approval gate | `200 OK`, `422 Unprocessable`, `500 Internal Error` |
+| `POST` | `/agent` | Stateful LangGraph AI Agent workflow (`k8s_rag_search`, HITL `k8s_quantity_converter`, `MemorySaver`) | `200 OK`, `409 Conflict`, `422 Unprocessable`, `500 Internal Error` |
+| `POST` | `/agent/approve` | Dedicated endpoint to approve or reject a paused LangGraph `interrupt()` session | `200 OK`, `409 Conflict`, `422 Unprocessable`, `500 Internal Error` |
 
 ---
 
@@ -477,48 +486,88 @@ Example JSON refusal response from `POST /ask` on out-of-scope question Q6:
 }
 ```
 
-#### Test AI Agent Endpoint (`POST /agent`) with cURL:
+#### Test AI Agent Endpoints (`POST /agent` & `POST /agent/approve`) with cURL:
 
 **Scenario A — Grounded RAG Documentation Search (Autonomous Execution):**
 ```bash
 curl -X POST http://localhost:8000/agent \
   -H "Content-Type: application/json" \
-  -d '{"question": "What is a Pod and what command lists pods?"}'
+  -d '{"question": "What is a Pod and what command lists pods?", "session_id": "student-1"}'
 ```
 
-**Scenario B — Human-in-the-Loop (HITL) Quantity Converter Lifecycle:**
+**Scenario B — Approval-Required Quantity Conversion & Comparison (LangGraph `interrupt()` / `Command(resume=...)`):**
 
-Step 1: Request conversion (workflow pauses at approval gate):
+Step 1: Request quantity comparison (LangGraph pauses at `approval_node` and checkpoints state in `MemorySaver`):
 ```bash
 curl -X POST http://localhost:8000/agent \
   -H "Content-Type: application/json" \
-  -d '{"question": "Convert 500m CPU to cores"}'
+  -d '{"question": "Compare 1Gi and 1G memory", "session_id": "demo-hitl-1"}'
 ```
-*Response returns `"approval_required": true`, `"approval_status": "pending"`, and a `"session_id"`.*
+Actual JSON response while paused awaiting human approval:
+```json
+{
+  "question": "Compare 1Gi and 1G memory",
+  "answer": "Human approval required before executing 'k8s_quantity_converter' with arguments {\"quantity\": \"1Gi\", \"compare_to\": \"1G\"}. Respond with approved=true to execute or approved=false to reject.",
+  "tool_calls": [],
+  "citations": [],
+  "session_id": "demo-hitl-1",
+  "approval_required": true,
+  "approval_status": "pending",
+  "pending_tool": {
+    "tool": "k8s_quantity_converter",
+    "arguments": {
+      "quantity": "1Gi",
+      "compare_to": "1G"
+    }
+  },
+  "iteration_count": 1,
+  "success": true
+}
+```
 
-Step 2: Submit human approval to proceed with execution:
+Step 2: Approve execution via `POST /agent/approve` (or resume via `POST /agent` with `session_id` + `approved`):
 ```bash
-curl -X POST http://localhost:8000/agent \
+curl -X POST http://localhost:8000/agent/approve \
   -H "Content-Type: application/json" \
-  -d '{"question": "proceed", "session_id": "<SESSION_ID>", "approved": true}'
+  -d '{"session_id": "demo-hitl-1", "approved": true}'
 ```
-*Response executes tool and returns `"0.5 core(s) (500 millicores)"` with `"approval_status": "approved"`.*
+Actual JSON response after human approval and deterministic execution:
+```json
+{
+  "question": "Compare 1Gi and 1G memory",
+  "answer": "1Gi Memory (binary SI (base 1024: 1Gi = 1024Mi = 1,073,741,824 bytes)) equals 1,073,741,824 bytes (1024 Mi / 1 Gi binary, or 1.073742 G decimal). 1Gi (1,073,741,824 bytes, binary_si) is greater than 1G (1,000,000,000 bytes, decimal_si) [1Gi > 1G]. Difference: 73,741,824 bytes (70.3257 Mi).",
+  "tool_calls": [
+    {
+      "step": 1,
+      "tool": "k8s_quantity_converter",
+      "arguments": { "quantity": "1Gi", "compare_to": "1G" },
+      "success": true
+    }
+  ],
+  "citations": [],
+  "session_id": "demo-hitl-1",
+  "approval_required": false,
+  "approval_status": "approved",
+  "pending_tool": null,
+  "iteration_count": 2,
+  "success": true
+}
+```
 
-Step 3: Reject execution (optional rejection path):
+Step 3: Reject execution (skips `tool_execution_node` completely and returns `tool_calls: []`):
 ```bash
-curl -X POST http://localhost:8000/agent \
+curl -X POST http://localhost:8000/agent/approve \
   -H "Content-Type: application/json" \
-  -d '{"question": "cancel", "session_id": "<SESSION_ID>", "approved": false}'
+  -d '{"session_id": "demo-hitl-2", "approved": false}'
 ```
-*Response aborts tool execution cleanly with `"approval_status": "rejected"`.*
 
 ### 5. Run Day 9 Agent Loop & LangGraph Workflow CLI
 
 ```bash
-# Run educational agent loop
+# Run hand-written ReAct agent loop
 python -m app.agent_loop
 
-# Run stateful LangGraph agent
+# Run stateful LangGraph agent with interrupt/resume demonstration
 python -m app.graph
 ```
 
@@ -529,13 +578,13 @@ python -m app.graph
 python -m eval.run_eval
 ```
 
-### 6. Run Pandas Exploratory Analysis
+### 7. Run Pandas Exploratory Analysis
 
 ```bash
 python -m analysis.explore
 ```
 
-### 7. Run TF-IDF Smart Search CLI Tester
+### 8. Run TF-IDF Smart Search CLI Tester
 
 ```bash
 python -m app.smart_search
@@ -551,9 +600,13 @@ python -m app.vectorstore
 ### 10. Run Complete Test Suite (Days 3, 4, 6, 7, 8 & 9)
 
 ```bash
+# Run Day 9 agent & LangGraph tests only (29 tests, ~0.4s, zero API key required)
+python -m unittest tests/test_day09.py -v
+
+# Run full regression + Day 9 test suite (108 tests total)
 python -m unittest discover tests -v
 ```
-*(Runs all 102 automated unit tests across models, ingestion, REST endpoints, smart search, LLM providers, chunking, embeddings, ChromaDB, RAG pipeline, agent tools, loop, and LangGraph workflow)*
+**Actual Verified Results:** `Ran 108 tests in 18.471s — OK` (**29 / 29** Day 9 tests + **79 / 79** regression tests across Days 3, 4, 6, 7, and 8).
 
 ### 11. Run Earlier Day Modules
 
