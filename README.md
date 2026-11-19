@@ -280,12 +280,61 @@ Detailed architectural design and safety analysis: **[`docs/day09_architecture.m
   - Added **29 automated unit and integration tests** (zero real API key required) covering all 12 quantity converter cases, 6 hand-written agent loop cases, 6 LangGraph interrupt/resume/MemorySaver/isolation/citation cases, and 5 FastAPI integration & regression checks.
   - **Actual Verified Results (`python -m unittest discover tests -v`):** **108 / 108 tests passing** (`29` Day 9 tests + `79` existing regression tests across Days 3, 4, 6, 7, and 8).
 
+## Day 10 Progress — Professional Streamlit UI + Checkpoint 2
+
+Comprehensive Checkpoint 2 live demo script and viva talking points: **[`docs/checkpoint2_demo.md`](docs/checkpoint2_demo.md)**
+
+![KubeCoach Day 10 Streamlit UI](docs/screenshots/kubecoach-day10.png)
+
+- **Dedicated Streamlit UI Architecture ([`ui/app.py`](ui/app.py)):**
+  - Designed and built a responsive developer-tool UI tailored for final-year students learning Kubernetes and preparing for DevOps interviews.
+  - Communicates strictly with the FastAPI backend over HTTP via [`ui/api_client.py`](ui/api_client.py) without duplicating any RAG, LLM, agent, or vector database logic in the frontend layer.
+  - Configurable backend target using `API_BASE_URL` environment variable (defaults to `http://127.0.0.1:8000`).
+  - Professional dark navy and charcoal developer theme configured in [`.streamlit/config.toml`](.streamlit/config.toml) (`primaryColor="#38bdf8"`, `backgroundColor="#0b1120"`, `secondaryBackgroundColor="#1e293b"`, `textColor="#f1f5f9"`).
+  - Clean sidebar featuring backend connectivity status pill (`Online` / `Offline`), active provider badge, real-time mode toggle (RAG vs. Agent), session statistics, conversation reset ("New Chat"), and developer information.
+
+- **Dual Interaction Modes:**
+  - **RAG Mode (`POST /ask`):** Answers Kubernetes architectural and conceptual questions with grounded facts, confidence scores (`high`, `medium`, `low`), and verified source citations. Safely admits out-of-scope queries (e.g. Q6 Istio mTLS) with honest refusal and zero hallucinated citations.
+  - **Agent Mode (`POST /agent` & `POST /agent/approve`):** Stateful multi-turn LangGraph AI agent workflow with autonomous tool dispatch (`k8s_rag_search`), execution traces, and human-in-the-loop (HITL) authorization for critical tools.
+
+- **Signature Feature — Kubernetes Object Relationship Strip ([`ui/relationships.py`](ui/relationships.py)):**
+  - Automatically identifies core Kubernetes resources mentioned in questions and answers, and renders an intuitive horizontal relationship graph directly below the response.
+  - **Verified Object Topologies:**
+    - `Deployment` $\rightarrow$ `ReplicaSet` $\rightarrow$ `Pods` $\leftarrow$ `Service` $\leftarrow$ `Ingress`
+    - `StatefulSet` $\rightarrow$ `Pods` $\leftrightarrow$ `PersistentVolumeClaim` $\rightarrow$ `PersistentVolume`
+    - `DaemonSet` $\rightarrow$ `Pods (Every Node)` $\leftarrow$ `Service`
+    - `Job` $\rightarrow$ `Pods (Batch run to completion)`
+    - `CronJob` $\rightarrow$ `Job` $\rightarrow$ `Pods (Scheduled)`
+    - `ConfigMap / Secret` $\rightarrow$ `Pods (Volume / Env)`
+    - `Namespace` $\rightarrow$ `ResourceQuota` $\rightarrow$ `Pods`
+    - `Role` $\leftarrow$ `RoleBinding` $\rightarrow$ `ServiceAccount`
+  - Dynamically highlights active objects matching the user's inquiry, provides interactive mouseover tooltips detailing resource roles, and is strictly suppressed when the system triggers an honest refusal on out-of-scope questions (Q6).
+
+- **Interactive Human-In-The-Loop (HITL) Approval Cards:**
+  - When the LangGraph agent requires student approval for tool execution (e.g., `k8s_quantity_converter` comparison), the UI dynamically pauses and renders a prominent amber confirmation banner displaying the pending tool name and exact JSON arguments.
+  - Provides one-click **"Approve Tool Execution"** (`approved=True`) and **"Reject Tool Execution"** (`approved=False`) buttons connecting to `POST /agent/approve`.
+
+- **Student Thumbs-Up / Thumbs-Down Feedback System:**
+  - Clean rating widget under every assistant response allowing students to indicate whether the explanation was helpful or needs improvement.
+  - Backend endpoints (`POST /feedback` and `GET /feedback` in [`app/main.py`](app/main.py)) validate requests, append non-sensitive records to [`data/feedback.json`](data/feedback.json), and return `409 Conflict` to prevent duplicate submissions for the same response ID.
+
+- **Comprehensive Test Suite ([`tests/test_day10.py`](tests/test_day10.py)):**
+  - Added **14 automated unit and integration tests** covering:
+    - Backend API client health checks, timeouts, and error handling (`TestDay10BackendClient`)
+    - Clickable citation rendering and empty notices (`TestDay10CitationsAndRelationships`)
+    - Accurate Kubernetes object relationship mapping and refusal suppression
+    - Feedback persistence, 409 duplicate rejection, and input validation (`TestDay10FeedbackPersistenceAndSession`)
+    - Multi-turn session persistence, conversation reset, and Streamlit AppTest headless launch
+  - **Actual Verified Results (`python -m unittest discover tests -v`):** **122 / 122 tests passing** across Days 3, 4, 6, 7, 8, 9, and 10 in 78.4s with 0 errors and 0 failures.
+
 ---
 
 ## Repository Structure
 
 ```text
 GenAI/
+├── .streamlit/
+│   └── config.toml          # Day 10: Streamlit dark developer theme configuration
 ├── app/
 │   ├── __init__.py
 │   ├── agent_loop.py        # Day 9: Hand-written ReAct agent loop with execution trace
@@ -296,7 +345,7 @@ GenAI/
 │   ├── graph.py             # Day 9: LangGraph StateGraph + MemorySaver + interrupt/resume
 │   ├── ingest.py            # Day 3: Markdown parsing and JSON ingestion pipeline
 │   ├── llm.py               # Day 6: Unified LLM provider wrapper (Groq, Gemini, Mock)
-│   ├── main.py              # Day 4-9: FastAPI backend (/chat, /ask, /agent, /agent/approve)
+│   ├── main.py              # Day 4-10: FastAPI backend (/chat, /ask, /agent, /feedback)
 │   ├── models.py            # Day 3: Record dataclass and custom exception types
 │   ├── rag.py               # Day 8: Grounded RAG pipeline with citations & refusal guardrail
 │   ├── records.py           # Day 2/3: Record loading and querying functions
@@ -306,19 +355,20 @@ GenAI/
 ├── analysis/
 │   ├── __init__.py
 │   └── explore.py           # Day 4: Pandas data exploration and insights
-├── docs/
-│   ├── checkpoint_1.md      # Day 5: Checkpoint 1 viva & walkthrough guide
-│   ├── day09_architecture.md # Day 9: Agent, LangGraph, MemorySaver & HITL architecture
-│   └── how_llms_work.md     # Day 5: Beginner-friendly LLM internals guide
 ├── data/
 │   ├── __init__.py
+│   ├── feedback.json        # Day 10: Persisted student feedback records
 │   ├── manifest.json        # Fetch metadata provenance (in data/raw/)
 │   ├── raw/                 # Downloaded raw documentation files
 │   ├── records.json         # Standardized JSON knowledge base (18 records)
 │   └── questions.json       # Persisted student questions
 ├── docs/
-│   ├── how_llms_work.md     # Day 5: LLM fundamentals, Transformer & attention guide
-│   └── checkpoint_1.md      # Day 5: Checkpoint 1 review & viva preparation guide
+│   ├── checkpoint_1.md      # Day 5: Checkpoint 1 viva & walkthrough guide
+│   ├── checkpoint2_demo.md  # Day 10: Checkpoint 2 live demo script & viva talking points
+│   ├── day09_architecture.md # Day 9: Agent, LangGraph, MemorySaver & HITL architecture
+│   ├── how_llms_work.md     # Day 5: Beginner-friendly LLM internals guide
+│   └── screenshots/         # Day 10: UI screenshots
+│       └── kubecoach-day10.png # Live Streamlit UI screenshot with relationship strip
 ├── eval/
 │   ├── eval_results.json    # Day 8: Multi-configuration benchmark execution metrics
 │   ├── eval_set.json        # Day 8: 15-question evaluation benchmark dataset
@@ -338,11 +388,18 @@ GenAI/
 │   ├── test_day04.py        # Day 4 test suite (18 tests)
 │   ├── test_day06.py        # Day 6 test suite (13 tests)
 │   ├── test_day07.py        # Day 7 test suite (16 tests)
-│   └── test_day08.py        # Day 8 test suite (16 tests)
-├── .env.example             # Day 6: Environment configuration template
+│   ├── test_day08.py        # Day 8 test suite (16 tests)
+│   ├── test_day09.py        # Day 9 test suite (29 tests)
+│   └── test_day10.py        # Day 10 test suite (14 tests)
+├── ui/
+│   ├── __init__.py
+│   ├── api_client.py        # Day 10: Isolated FastAPI HTTP client with timeouts & errors
+│   ├── app.py               # Day 10: Professional Streamlit UI application
+│   └── relationships.py     # Day 10: Kubernetes Object Relationship Strip engine & HTML
+├── .env.example             # Day 6-10: Environment configuration template (API_BASE_URL)
 ├── day01_intro.py           # Day 1 introduction script
 ├── day01_menu.py            # Day 1 menu script
-├── requirements.txt         # Project dependencies (FastAPI, Groq, ChromaDB, etc.)
+├── requirements.txt         # Project dependencies (FastAPI, Streamlit, LangGraph, etc.)
 ├── README.md                # Documentation
 └── .gitignore
 ```
@@ -364,6 +421,8 @@ GenAI/
 | `POST` | `/ask` | Grounded RAG question answering with verified citations and honest refusal guardrail | `200 OK`, `422 Unprocessable`, `429 Too Many Requests`, `502 Bad Gateway`, `503 Unavailable`, `504 Gateway Timeout` |
 | `POST` | `/agent` | Stateful LangGraph AI Agent workflow (`k8s_rag_search`, HITL `k8s_quantity_converter`, `MemorySaver`) | `200 OK`, `409 Conflict`, `422 Unprocessable`, `500 Internal Error` |
 | `POST` | `/agent/approve` | Dedicated endpoint to approve or reject a paused LangGraph `interrupt()` session | `200 OK`, `409 Conflict`, `422 Unprocessable`, `500 Internal Error` |
+| `POST` | `/feedback` | Submit student thumbs up/down rating; persists to `data/feedback.json` | `201 Created`, `409 Conflict`, `422 Unprocessable` |
+| `GET` | `/feedback` | List submitted feedback entries for analysis | `200 OK` |
 
 ---
 
@@ -399,6 +458,7 @@ cp .env.example .env
 ### 3. Start the FastAPI Server (Uvicorn)
 
 ```bash
+# Terminal 1: Start FastAPI REST backend
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -406,7 +466,17 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - Interactive Swagger UI Documentation: `http://127.0.0.1:8000/docs`
 - Alternative ReDoc Documentation: `http://127.0.0.1:8000/redoc`
 
-### 4. Example API Requests
+### 4. Launch the Streamlit User Interface
+
+```bash
+# Terminal 2: Start Streamlit frontend (connects to FastAPI at API_BASE_URL)
+streamlit run ui/app.py
+```
+
+- Streamlit Web Application: `http://127.0.0.1:8501`
+- Configure custom backend endpoint via `API_BASE_URL` in `.env` (defaults to `http://127.0.0.1:8000`).
+
+### 5. Example API Requests
 
 ```bash
 # Health check (includes provider status)
@@ -597,18 +667,18 @@ python -m app.smart_search
 python -m app.vectorstore
 ```
 
-### 10. Run Complete Test Suite (Days 3, 4, 6, 7, 8 & 9)
+### 11. Run Complete Test Suite (Days 3 to 10)
 
 ```bash
-# Run Day 9 agent & LangGraph tests only (29 tests, ~0.4s, zero API key required)
-python -m unittest tests/test_day09.py -v
+# Run Day 10 Streamlit UI, client & relationship strip tests (14 tests)
+python -m unittest tests/test_day10.py -v
 
-# Run full regression + Day 9 test suite (108 tests total)
+# Run full regression test suite (122 tests total)
 python -m unittest discover tests -v
 ```
-**Actual Verified Results:** `Ran 108 tests in 18.471s — OK` (**29 / 29** Day 9 tests + **79 / 79** regression tests across Days 3, 4, 6, 7, and 8).
+**Actual Verified Results:** `Ran 122 tests in 78.407s — OK` (**14 / 14** Day 10 tests + **29 / 29** Day 9 tests + **79 / 79** regression tests across Days 3, 4, 6, 7, and 8 with 0 errors and 0 failures).
 
-### 11. Run Earlier Day Modules
+### 12. Run Earlier Day Modules
 
 ```bash
 # Day 1

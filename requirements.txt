@@ -1,4 +1,4 @@
-# KubeCoach Dependencies (Days 3, 4, 6, 7, 8, 9)
+# KubeCoach Dependencies (Days 3, 4, 6, 7, 8, 9, 10)
 requests>=2.28.0
 fastapi>=0.100.0
 uvicorn[standard]>=0.20.0
@@ -12,4 +12,5 @@ groq>=0.9.0
 chromadb>=0.4.0
 sentence-transformers>=2.2.0
 langgraph>=0.2.0
+streamlit>=1.35.0
 posthog<3.0.0; python_version < "3.9"

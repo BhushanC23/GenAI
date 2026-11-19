@@ -62,6 +62,7 @@ def startup_event() -> None:
         logger.warning("Vector store startup warmup failed: %s", exc)
 
 QUESTIONS_FILE_PATH = REPO_ROOT / "data" / "questions.json"
+FEEDBACK_FILE_PATH = REPO_ROOT / "data" / "feedback.json"
 
 
 # Pydantic Schemas
@@ -243,6 +244,52 @@ class AgentResponse(BaseModel):
     success: bool = Field(default=True, description="Whether the request succeeded.")
 
 
+class FeedbackRequest(BaseModel):
+    """Schema for persistent user thumbs-up / thumbs-down feedback on an assistant answer."""
+
+    response_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="Unique identifier for the assistant response being rated.",
+        example="resp-1a2b3c4d",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="Chat session identifier associated with the response.",
+        example="sess-a1b2c3d4",
+    )
+    feedback: str = Field(
+        ...,
+        description="Feedback rating: 'up' (helpful) or 'down' (not helpful).",
+        example="up",
+    )
+    question: Optional[str] = Field(
+        default="",
+        max_length=1000,
+        description="Original student question associated with this response.",
+    )
+    mode: Optional[str] = Field(
+        default="rag",
+        max_length=32,
+        description="Assistant mode used ('rag' or 'agent').",
+    )
+
+
+class FeedbackResponse(BaseModel):
+    """Schema returned after recording feedback persistently."""
+
+    status: str
+    feedback_id: str
+    response_id: str
+    session_id: str
+    feedback: str
+    mode: str
+    timestamp: str
+
+
 @app.get("/", tags=["General"])
 def root() -> Dict[str, str]:
     """Root welcome endpoint providing links to documentation."""
@@ -256,6 +303,7 @@ def root() -> Dict[str, str]:
         "ask_url": "/ask",
         "agent_url": "/agent",
         "agent_approve_url": "/agent/approve",
+        "feedback_url": "/feedback",
     }
 
 
@@ -727,5 +775,132 @@ def approve_kubecoach_agent_endpoint(payload: AgentApprovalRequest) -> AgentResp
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal server error occurred while resuming agent approval.",
         )
+
+
+def _load_feedback_records() -> List[Dict[str, Any]]:
+    """Safely load persisted feedback records from FEEDBACK_FILE_PATH."""
+    if not FEEDBACK_FILE_PATH.exists():
+        return []
+    try:
+        raw = FEEDBACK_FILE_PATH.read_text(encoding="utf-8")
+        data = json.loads(raw)
+        return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Could not parse feedback file (%s); starting fresh list.", exc)
+        return []
+
+
+def _save_feedback_records(records: List[Dict[str, Any]]) -> None:
+    """Safely write feedback records to FEEDBACK_FILE_PATH using UTF-8 JSON."""
+    FEEDBACK_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    FEEDBACK_FILE_PATH.write_text(json.dumps(records, indent=2), encoding="utf-8")
+
+
+@app.post(
+    "/feedback",
+    response_model=FeedbackResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Feedback"],
+)
+def submit_feedback(payload: FeedbackRequest) -> FeedbackResponse:
+    """Persist thumbs-up / thumbs-down feedback to data/feedback.json.
+
+    Prevents duplicate feedback submissions for the same (session_id, response_id).
+    Never stores API keys or sensitive credentials.
+    """
+    response_id = payload.response_id.strip()
+    session_id = payload.session_id.strip()
+    raw_feedback = payload.feedback.strip().lower()
+    mode = (payload.mode or "rag").strip().lower()
+    question_text = (payload.question or "").strip()
+
+    if not response_id or not session_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="response_id and session_id cannot be empty or whitespace only.",
+        )
+
+    feedback_map = {
+        "up": "up",
+        "thumbs_up": "up",
+        "helpful": "up",
+        "down": "down",
+        "thumbs_down": "down",
+        "not_helpful": "down",
+    }
+    normalized_feedback = feedback_map.get(raw_feedback)
+    if not normalized_feedback:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="feedback must be 'up' (helpful) or 'down' (not_helpful).",
+        )
+
+    if mode not in ("rag", "agent"):
+        mode = "rag"
+
+    records = _load_feedback_records()
+
+    # Prevent duplicate submission for the same response in the same session
+    for existing in records:
+        if existing.get("response_id") == response_id and existing.get("session_id") == session_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Feedback already submitted for response_id '{response_id}'.",
+            )
+
+    feedback_id = f"fb-{uuid.uuid4().hex[:8]}"
+    timestamp = datetime.utcnow().isoformat() + "Z"
+
+    entry = {
+        "feedback_id": feedback_id,
+        "response_id": response_id,
+        "session_id": session_id,
+        "question": question_text[:500],
+        "feedback": normalized_feedback,
+        "mode": mode,
+        "timestamp": timestamp,
+    }
+    records.append(entry)
+
+    try:
+        _save_feedback_records(records)
+    except OSError as exc:
+        logger.error("Failed to persist feedback record: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not save feedback to storage.",
+        )
+
+    logger.info(
+        "Saved feedback [%s] (%s) for response '%s' in session '%s'",
+        feedback_id,
+        normalized_feedback,
+        response_id,
+        session_id,
+    )
+    return FeedbackResponse(
+        status="saved",
+        feedback_id=feedback_id,
+        response_id=response_id,
+        session_id=session_id,
+        feedback=normalized_feedback,
+        mode=mode,
+        timestamp=timestamp,
+    )
+
+
+@app.get("/feedback", tags=["Feedback"])
+def list_feedback() -> Dict[str, Any]:
+    """Return aggregate feedback counts and stored entries (non-sensitive)."""
+    records = _load_feedback_records()
+    helpful = sum(1 for r in records if r.get("feedback") == "up")
+    not_helpful = sum(1 for r in records if r.get("feedback") == "down")
+    return {
+        "total": len(records),
+        "helpful": helpful,
+        "not_helpful": not_helpful,
+        "items": records,
+    }
+
 
 
