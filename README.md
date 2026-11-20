@@ -327,6 +327,35 @@ Comprehensive Checkpoint 2 live demo script and viva talking points: **[`docs/ch
     - Multi-turn session persistence, conversation reset, and Streamlit AppTest headless launch
   - **Actual Verified Results (`python -m unittest discover tests -v`):** **122 / 122 tests passing** across Days 3, 4, 6, 7, 8, 9, and 10 in 78.4s with 0 errors and 0 failures.
 
+## Day 11 Progress — Comprehensive Testing & Quality Assurance
+
+Comprehensive Testing Guide & Coverage Documentation: **[`docs/testing.md`](docs/testing.md)**
+
+- **Dual Testing Framework Architecture (`unittest` + `pytest`):**
+  - Configured project-wide testing using both standard Python library `unittest` and modern `pytest` (`pytest>=8.0.0`, `pytest-cov>=5.0.0`).
+  - Added clean project configuration in [`pytest.ini`](pytest.ini) with automated discovery across `tests/test_*.py` and warning filters.
+  - Zero external cloud or API key dependencies: all tests run offline with mock LLM providers, deterministic embedders, and isolated temporary directories.
+
+- **Comprehensive End-to-End QA Test Suite ([`tests/test_day11.py`](tests/test_day11.py)):**
+  - Added **28 dedicated unit, integration, and contract QA tests** spanning 7 architectural categories:
+    1. **Category A — Core Python & Data Validation:** Record model boundaries, URL scheme validation, corrupt file recovery via fallback seed records, sliding-window chunking edge cases (empty strings, Unicode, emojis), and Hugo shortcode stripping.
+    2. **Category B — FastAPI REST Contracts:** Contract verification on `/health`, pagination limits (`limit=1`, `limit=100`, boundary 422s for `0`, `101`, `-3`), 404 handling on unknown IDs, query parameters on `/search`, semantic search filtering, and HTTP 405 Method Not Allowed checks.
+    3. **Category C — Data Ingestion Resilience:** Simulated connection drops (`requests.exceptions.ConnectionError`), HTTP 500 server errors, malformed frontmatter recovery, and ingestion idempotence.
+    4. **Category D — Search & Retrieval Systems:** Lexical TF-IDF behavior on pure English stop words and gibberish, dense vector ChromaDB score normalization, and category filtering.
+    5. **Category E — RAG Grounding & Refusals:** Factual grounding assertions, citation authenticity checks (verifying `source_url` and `document_title`), and guaranteed honest refusal on out-of-scope question Q6 (Istio mTLS) with zero fake citations.
+    6. **Category F — AI Agent & Deterministic Quantities:** Zero value boundaries (`0m`, `0`, `0Mi`), cross-unit equality comparisons (`500m == 0.5 cores`, `1024Mi == 1Gi`), negative and invalid suffix rejections, tool dispatcher allow-listing, ReAct loop iteration bounds (`max_iterations = 3`), and LangGraph human approval isolation with rejection handling.
+    7. **Category G — Streamlit UI Client Resilience:** Connection failure resilience in `check_health()`, case-insensitive object detection in `detect_mentioned_objects()`, and HTTP 409 Conflict rejection for duplicate feedback submissions.
+
+- **Real Code Coverage Measurement (`pytest-cov`):**
+  - Measured genuine statement coverage across all core modules (`app/` and `ui/`): **74% total project code coverage** (1,882 of 2,540 statements covered).
+  - High-reliability modules achieved top coverage: `app/models.py` (**90%**), `app/graph.py` (**89%**), `app/chunking.py` (**89%**), `ui/api_client.py` (**88%**), `ui/relationships.py` (**88%**), `app/records.py` (**85%**), `app/ingest.py` (**82%**), and `app/tools.py` (**80%**).
+
+- **Actual Verified Test Results:**
+  - **Total Tests Collected:** **150 items**
+  - **Passed:** **150 / 150 (100%)**
+  - **Failed:** **0**
+  - **Execution Time:** ~59.5s (`unittest`) / ~85.8s (`pytest --cov`)
+
 ---
 
 ## Repository Structure
@@ -367,6 +396,7 @@ GenAI/
 │   ├── checkpoint2_demo.md  # Day 10: Checkpoint 2 live demo script & viva talking points
 │   ├── day09_architecture.md # Day 9: Agent, LangGraph, MemorySaver & HITL architecture
 │   ├── how_llms_work.md     # Day 5: Beginner-friendly LLM internals guide
+│   ├── testing.md           # Day 11: Comprehensive testing & QA documentation
 │   └── screenshots/         # Day 10: UI screenshots
 │       └── kubecoach-day10.png # Live Streamlit UI screenshot with relationship strip
 ├── eval/
@@ -390,7 +420,8 @@ GenAI/
 │   ├── test_day07.py        # Day 7 test suite (16 tests)
 │   ├── test_day08.py        # Day 8 test suite (16 tests)
 │   ├── test_day09.py        # Day 9 test suite (29 tests)
-│   └── test_day10.py        # Day 10 test suite (14 tests)
+│   ├── test_day10.py        # Day 10 test suite (14 tests)
+│   └── test_day11.py        # Day 11 QA & regression test suite (28 tests)
 ├── ui/
 │   ├── __init__.py
 │   ├── api_client.py        # Day 10: Isolated FastAPI HTTP client with timeouts & errors
@@ -399,7 +430,8 @@ GenAI/
 ├── .env.example             # Day 6-10: Environment configuration template (API_BASE_URL)
 ├── day01_intro.py           # Day 1 introduction script
 ├── day01_menu.py            # Day 1 menu script
-├── requirements.txt         # Project dependencies (FastAPI, Streamlit, LangGraph, etc.)
+├── pytest.ini               # Day 11: Pytest test runner configuration
+├── requirements.txt         # Project dependencies (FastAPI, Streamlit, LangGraph, Pytest, etc.)
 ├── README.md                # Documentation
 └── .gitignore
 ```
@@ -667,16 +699,22 @@ python -m app.smart_search
 python -m app.vectorstore
 ```
 
-### 11. Run Complete Test Suite (Days 3 to 10)
+### 11. Run Complete Test Suite (Days 3 to 11)
 
 ```bash
-# Run Day 10 Streamlit UI, client & relationship strip tests (14 tests)
-python -m unittest tests/test_day10.py -v
+# Run full test suite with modern pytest (150 tests total)
+pytest tests/ -v
 
-# Run full regression test suite (122 tests total)
+# Run full test suite with code coverage measurement (74% project coverage)
+pytest tests/ --cov=app --cov=ui --cov-report=term-missing
+
+# Run Day 11 QA & regression test suite specifically (28 tests)
+pytest tests/test_day11.py -v
+
+# Run full regression test suite using Python standard unittest
 python -m unittest discover tests -v
 ```
-**Actual Verified Results:** `Ran 122 tests in 78.407s — OK` (**14 / 14** Day 10 tests + **29 / 29** Day 9 tests + **79 / 79** regression tests across Days 3, 4, 6, 7, and 8 with 0 errors and 0 failures).
+**Actual Verified Results:** `Ran 150 tests in 59.499s — OK` (**28 / 28** Day 11 tests + **14 / 14** Day 10 tests + **29 / 29** Day 9 tests + **79 / 79** regression tests across Days 3, 4, 6, 7, and 8 with 0 errors and 0 failures). Overall code coverage: **74%**.
 
 ### 12. Run Earlier Day Modules
 
