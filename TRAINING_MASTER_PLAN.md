@@ -370,18 +370,27 @@ Upgrade `/search` to use smart/TF-IDF search as assigned.
 
 **Commit prefix:** `day-11:`
 
-### Day 12 — Docker and containerization (high-level known scope)
-The training overview identifies Docker/containerization as a remaining focus. Exact official Day 12 task card is not available here.
+### Day 12 — Docker Containerization
+**Source:** Official Day 12 Task Prompt provided by student on November 20, 2026.
 
-**Working scope only**
-- Learn Docker image/container basics.
-- Containerize the application using a maintainable Dockerfile.
-- Use `.dockerignore`.
-- Do not bake API keys into images.
-- Document build/run commands.
-- Verify the container actually starts and the health endpoint works.
+**Topics & Objectives**
+- Docker images, containers, Dockerfile syntax, build layers, and caching
+- Containerizing KubeCoach using official `python:3.11-slim` base image
+- Principle of least privilege: non-root user (`USER kubecoach`, UID 1000)
+- Context hygiene via `.dockerignore` excluding `.env`, `.venv`, and caches
+- Multi-mode runtime entrypoint script (`docker-entrypoint.sh` supporting `api`, `ui`, `all`, `test`)
+- Multi-service orchestration with `docker-compose.yml` (FastAPI backend + Streamlit frontend)
+- Persistent volume storage for datasets & ChromaDB (`kubecoach_data:/app/data`)
 
-Exact files, Compose requirements, commit prefix and acceptance criteria must come from the official card.
+**Deliverables**
+- `Dockerfile` (lightweight, non-root, layer-cached image with healthcheck)
+- `.dockerignore` (build context exclusion rules)
+- `docker-entrypoint.sh` (multi-mode container entrypoint)
+- `docker-compose.yml` (backend + frontend orchestration)
+- `docs/docker.md` (comprehensive Docker guide, lifecycle commands, volume explanation, troubleshooting)
+- `README.md` (updated Docker quickstart and documentation links)
+
+**Commit prefix:** `day-12:`
 
 ### Day 13 — GitHub Actions and CI/CD (high-level known scope)
 The training overview identifies GitHub Actions/CI/CD as a remaining focus. Exact official task card is not available here.
@@ -544,8 +553,8 @@ Use this section as a human-maintained status summary. Update it after each trai
 | 8 | RAG/evaluation | Completed | Commit `ab41e4c` | Grounded RAG, citations, Q6 refusal, 16 tests |
 | 9 | Agent/LangGraph/tools | Completed | Commit `04dc2b1` | Quantity converter, ReAct, LangGraph HITL, 29 tests |
 | 10 | Streamlit/checkpoint 2 | Completed | Commit `37f08ad` | Tag `checkpoint-2`, UI, relationship strip, 14 tests |
-| 11 | Testing & QA | Implemented & Verified | `tests/test_day11.py`, `docs/testing.md` | Dual test runners (pytest/unittest), 150 tests passing (28 new QA tests), 74% coverage |
-| 12 | Docker | Must verify | Official task card pending | Containerization |
+| 11 | Testing & QA | Completed | Commit `9334506` | Dual test runners (pytest/unittest), 150 tests passing (28 new QA tests), 74% coverage |
+| 12 | Docker | Implemented & Configured | `Dockerfile`, `docker-compose.yml`, `docs/docker.md` | Python 3.11-slim, non-root, multi-mode entrypoint, volumes, ports 8000/8501 |
 | 13 | GitHub Actions/CI | Must verify | Official task card pending | CI/CD automated workflow |
 | 14 | Deployment/production/portfolio | Must verify | Official task card pending | Cloud deployment & security |
 | 15 | Final evaluation | Must verify | Official task card pending | Viva demo & portfolio |

@@ -1,0 +1,40 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Virtual Environments
+.venv/
+.venv*/
+venv/
+env/
+
+# Python cache & compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local secrets & environment files
+.env
+.env.*
+!.env.example
+
+# Local database caches and temp
+data/chroma_db/
+.chroma/
+*.log
+*.tmp
+
+# Documentation screenshots / design files
+docs/screenshots/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

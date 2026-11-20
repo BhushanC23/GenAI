@@ -1,0 +1,50 @@
+# ==============================================================================
+# KubeCoach Docker Compose (Day 12)
+# ==============================================================================
+# Orchestrates FastAPI backend and Streamlit frontend in a unified network
+# with shared persistent volume storage for datasets and ChromaDB embeddings.
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kubecoach:latest
+    container_name: kubecoach-backend
+    command: api
+    ports:
+      - "8000:8000"
+    environment:
+      - LLM_PROVIDER=mock
+      - API_BASE_URL=http://backend:8000
+    volumes:
+      - kubecoach_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kubecoach:latest
+    container_name: kubecoach-frontend
+    command: ui
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  kubecoach_data:
+    driver: local

@@ -356,6 +356,33 @@ Comprehensive Testing Guide & Coverage Documentation: **[`docs/testing.md`](docs
   - **Failed:** **0**
   - **Execution Time:** ~59.5s (`unittest`) / ~85.8s (`pytest --cov`)
 
+## Day 12 Progress — Docker Containerization
+
+Comprehensive Docker Containerization & Deployment Guide: **[`docs/docker.md`](docs/docker.md)**
+
+- **Production-Ready Docker Architecture ([`Dockerfile`](Dockerfile)):**
+  - Built on official, security-patched `python:3.11-slim` base image for a lightweight footprint and Debian binary compatibility.
+  - Layer-cached dependency installation (`COPY requirements.txt .` prior to source code) ensuring rapid rebuilds.
+  - Implements the security principle of least privilege by running under a dedicated non-root user (`USER kubecoach`, UID 1000).
+  - Built-in container health check querying `http://localhost:8000/health` via `curl` with automated retry policies.
+  - Environment defaults set for zero-config offline execution (`LLM_PROVIDER=mock`, `PORT=8000`, `HOST=0.0.0.0`).
+
+- **Flexible Multi-Mode Entrypoint Script ([`docker-entrypoint.sh`](docker-entrypoint.sh)):**
+  - Supports versatile runtime modes:
+    - `api` (default): Launches FastAPI Uvicorn REST backend on `http://0.0.0.0:8000`.
+    - `ui`: Launches Streamlit frontend on `http://0.0.0.0:8501`.
+    - `all`: Starts both FastAPI and Streamlit concurrently within one container with signal trapping.
+    - `test`: Executes the full 150-test Pytest test suite inside the container environment.
+    - `custom`: Supports running arbitrary commands (e.g. `bash`, `python`).
+
+- **Secret & Context Hygiene ([`.dockerignore`](.dockerignore)):**
+  - Strictly prevents sensitive files (`.env`, `.env.*`), virtual environments (`.venv*`), build caches (`__pycache__`), git history (`.git`), and local ChromaDB caches from entering image layers.
+  - Enforces secret injection at runtime via `-e` flags or Docker Compose environment blocks.
+
+- **Multi-Service Orchestration ([`docker-compose.yml`](docker-compose.yml)):**
+  - Orchestrates isolated `backend` (FastAPI, port 8000) and `frontend` (Streamlit, port 8501) services on a shared internal bridge network.
+  - Attaches a named volume (`kubecoach_data:/app/data`) ensuring persistent retention of student questions (`data/questions.json`), feedback (`data/feedback.json`), and ChromaDB embeddings across container recreation.
+
 ---
 
 ## Repository Structure
@@ -395,6 +422,7 @@ GenAI/
 │   ├── checkpoint_1.md      # Day 5: Checkpoint 1 viva & walkthrough guide
 │   ├── checkpoint2_demo.md  # Day 10: Checkpoint 2 live demo script & viva talking points
 │   ├── day09_architecture.md # Day 9: Agent, LangGraph, MemorySaver & HITL architecture
+│   ├── docker.md            # Day 12: Comprehensive Docker containerization guide
 │   ├── how_llms_work.md     # Day 5: Beginner-friendly LLM internals guide
 │   ├── testing.md           # Day 11: Comprehensive testing & QA documentation
 │   └── screenshots/         # Day 10: UI screenshots
@@ -427,9 +455,13 @@ GenAI/
 │   ├── api_client.py        # Day 10: Isolated FastAPI HTTP client with timeouts & errors
 │   ├── app.py               # Day 10: Professional Streamlit UI application
 │   └── relationships.py     # Day 10: Kubernetes Object Relationship Strip engine & HTML
-├── .env.example             # Day 6-10: Environment configuration template (API_BASE_URL)
+├── .dockerignore            # Day 12: Docker build context exclusions (secrets, venvs, caches)
+├── .env.example             # Day 6-12: Environment configuration template (API_BASE_URL)
 ├── day01_intro.py           # Day 1 introduction script
 ├── day01_menu.py            # Day 1 menu script
+├── docker-compose.yml       # Day 12: Multi-service container orchestration
+├── docker-entrypoint.sh     # Day 12: Multi-mode container runtime entrypoint
+├── Dockerfile               # Day 12: Python 3.11-slim non-root container image specification
 ├── pytest.ini               # Day 11: Pytest test runner configuration
 ├── requirements.txt         # Project dependencies (FastAPI, Streamlit, LangGraph, Pytest, etc.)
 ├── README.md                # Documentation
@@ -508,7 +540,32 @@ streamlit run ui/app.py
 - Streamlit Web Application: `http://127.0.0.1:8501`
 - Configure custom backend endpoint via `API_BASE_URL` in `.env` (defaults to `http://127.0.0.1:8000`).
 
-### 5. Example API Requests
+### 5. Run with Docker & Docker Compose (Day 12)
+
+Detailed Docker guide and troubleshooting: **[`docs/docker.md`](docs/docker.md)**
+
+```bash
+# A. Build the official Docker image
+docker build -t kubecoach .
+
+# B. Run FastAPI backend container on port 8000 (with persistent volume)
+docker run -d \
+  --name kubecoach-container \
+  -p 8000:8000 \
+  -v kubecoach_data:/app/data \
+  kubecoach
+
+# C. Or run both backend (port 8000) and Streamlit (port 8501) with Docker Compose:
+docker compose up -d
+
+# View running container logs:
+docker logs -f kubecoach-container
+
+# Stop and cleanup container:
+docker stop kubecoach-container && docker rm kubecoach-container
+```
+
+### 6. Example API Requests
 
 ```bash
 # Health check (includes provider status)
