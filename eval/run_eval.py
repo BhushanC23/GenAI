@@ -277,7 +277,7 @@ def generate_markdown_report(
         "# KubeCoach — Day 8 RAG Configuration Benchmark & Evaluation Report",
         "",
         "## Executive Summary",
-        f"This report compares two RAG pipeline configurations evaluated across all 15 benchmark questions in `eval/eval_set.json`.",
+        "This report compares two RAG pipeline configurations evaluated across all 15 benchmark questions in `eval/eval_set.json`.",
         f"- **Winning Configuration:** **{winner}**",
         f"- **Rationale:** {reason}",
         "",
