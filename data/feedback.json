@@ -1,1 +1,29 @@
-[]
+[
+  {
+    "feedback_id": "fb-9aacba8a",
+    "response_id": "resp-67a89ffb",
+    "session_id": "ui-bbb7c828",
+    "question": "what is docker ??",
+    "feedback": "down",
+    "mode": "rag",
+    "timestamp": "2026-11-20T09:08:21.516344Z"
+  },
+  {
+    "feedback_id": "fb-1732f3c9",
+    "response_id": "resp-345773b8",
+    "session_id": "ui-f9263795",
+    "question": "What is the difference between ConfigMap and Secret?",
+    "feedback": "down",
+    "mode": "rag",
+    "timestamp": "2026-11-20T09:09:29.331000Z"
+  },
+  {
+    "feedback_id": "fb-b5fd2afb",
+    "response_id": "resp-ddb30c7a",
+    "session_id": "ui-26ae3bca",
+    "question": "Explain Liveness and Readiness probes.",
+    "feedback": "down",
+    "mode": "rag",
+    "timestamp": "2026-11-20T09:09:49.694222Z"
+  }
+]

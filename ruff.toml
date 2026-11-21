@@ -1,0 +1,21 @@
+# Ruff configuration for KubeCoach
+line-length = 120
+target-version = "py311"
+
+exclude = [
+    ".git",
+    ".venv",
+    ".venv311",
+    "__pycache__",
+    "data",
+]
+
+[lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E501",  # Line too long (> 120 characters)
+    "E402",  # Module level import not at top of file
+    "F401",  # Unused imports
+    "W291",  # Trailing whitespace
+    "W293",  # Blank line contains whitespace
+]
