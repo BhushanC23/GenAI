@@ -400,17 +400,25 @@ Upgrade `/search` to use smart/TF-IDF search as assigned.
 
 **Commit prefix:** `day-12:`
 
-### Day 13 — GitHub Actions and CI/CD (high-level known scope)
-The training overview identifies GitHub Actions/CI/CD as a remaining focus. Exact official task card is not available here.
+### Day 13 — GitHub Actions and CI/CD Automation
+**Source:** Official Day 13 Task Prompt provided by student on November 21, 2026.
 
-**Working scope only**
-- Automate checks on pushes and pull requests.
-- Install dependencies and run tests.
-- Use secrets only in repository/environment settings, not committed files.
-- Make workflow failures visible and fix them.
-- Document the workflow.
+**Topics & Objectives**
+- Continuous Integration (CI), Continuous Delivery (CD), and Continuous Deployment concepts
+- GitHub Actions architecture: Workflows, Triggers, Jobs, Steps, Runners, Actions, and Artifacts
+- Least privilege workflow permissions (`permissions: contents: read`) and job timeouts (`timeout-minutes: 15`)
+- Automated bytecode syntax validation using `python -m compileall -q`
+- Automated PEP 8 code quality linting via `ruff check .`
+- Automated test execution with 150 isolated pytest unit & integration tests (`pytest tests/ --cov=app`)
+- Docker container build validation in CI (`docker build -t kubecoach-ci .`) without registry push
+- Comprehensive documentation, troubleshooting, local validation steps, and viva preparation in `docs/ci_cd.md`
 
-Exact workflow filename, required jobs, badges, commit prefix and acceptance criteria must come from the official card.
+**Deliverables**
+- `.github/workflows/ci.yml` (enhanced with syntax validation, timeouts, least privilege, and container build)
+- `docs/ci_cd.md` (comprehensive CI/CD guide, comparison table, Mermaid flowchart, glossary, troubleshooting, and 10 viva questions)
+- `README.md` (updated Day 13 CI/CD progress section and documentation links)
+
+**Commit prefix:** `day-13:`
 
 ### Day 14 — Deployment, security, monitoring, cost, architecture and portfolio (high-level known scope)
 The training overview identifies deployment and production considerations as remaining focus.
@@ -563,7 +571,7 @@ Use this section as a human-maintained status summary. Update it after each trai
 | 10 | Streamlit/checkpoint 2 | Completed | Commit `37f08ad` | Tag `checkpoint-2`, UI, relationship strip, 14 tests |
 | 11 | Testing & QA | Completed | Commit `9334506` | Dual test runners (pytest/unittest), 150 tests passing (28 new QA tests), 74% coverage |
 | 12 | Docker, CI/CD & Deploy | Completed | Commit `0a4b5b6`, PR #1 (`8d0900f`) | CI (.github/workflows/ci.yml: ruff, pytest, docker build), PR #1 merged, live health URL, Docker & Compose |
-| 13 | GitHub Actions/CI | Must verify | Official task card pending | CI/CD automated workflow |
+| 13 | GitHub Actions/CI | Implemented & Verified | `.github/workflows/ci.yml`, `docs/ci_cd.md` | CI (compileall, ruff, pytest 150/150, docker build), permissions: read, timeout 15m |
 | 14 | Deployment/production/portfolio | Must verify | Official task card pending | Cloud deployment & security |
 | 15 | Final evaluation | Must verify | Official task card pending | Viva demo & portfolio |
 

@@ -10,10 +10,14 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   ci:
     name: Lint, Test & Container Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout Repository
@@ -30,6 +34,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Python Syntax Validation
+        run: |
+          python -m compileall -q app tests ui eval analysis day01_intro.py day01_menu.py
+
       - name: Run Ruff Lint Check
         run: |
           ruff check .
@@ -43,4 +51,4 @@ jobs:
 
       - name: Build Docker Container
         run: |
-          docker build -t kubecoach:latest .
+          docker build -t kubecoach-ci .

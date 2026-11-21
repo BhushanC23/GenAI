@@ -413,13 +413,31 @@ Comprehensive Docker Containerization & Deployment Guide: **[`docs/docker.md`](d
 
 ---
 
+## Day 13 Progress — CI/CD Automation with GitHub Actions
+
+Comprehensive CI/CD Automation Guide: **[`docs/ci_cd.md`](docs/ci_cd.md)**
+
+- **End-to-End Automated Pipeline ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)):**
+  - Triggers automatically on `push` to `main` and `feature/**` branches, and on every `pull_request` targeting `main`.
+  - Also supports manual execution via `workflow_dispatch`.
+- **Security & Least Privilege:**
+  - Configured `permissions: contents: read` restricting GitHub token capabilities.
+  - Set `timeout-minutes: 15` preventing orphaned processes from consuming compute quota.
+- **Automated Validation Stages:**
+  - **Syntax Validation:** Executes `python -m compileall -q` over all application modules to verify bytecode syntax integrity.
+  - **Code Quality:** Enforces PEP 8 standards with zero errors via `ruff check .`.
+  - **Automated Testing:** Runs 150 offline unit, integration, and API tests via `pytest` with coverage reporting.
+  - **Docker Container Build:** Builds `kubecoach-ci` image with Buildx to guarantee container reproducibility without pushing unverified images.
+
+---
+
 ## Repository Structure
 
 ```text
 GenAI/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml           # Day 12: GitHub Actions CI pipeline (Ruff, Pytest, Docker)
+│       └── ci.yml           # Day 12-13: GitHub Actions CI pipeline (Ruff, Pytest, Docker)
 ├── .streamlit/
 │   └── config.toml          # Day 10: Streamlit dark developer theme configuration
 ├── app/
@@ -452,6 +470,7 @@ GenAI/
 ├── docs/
 │   ├── checkpoint_1.md      # Day 5: Checkpoint 1 viva & walkthrough guide
 │   ├── checkpoint2_demo.md  # Day 10: Checkpoint 2 live demo script & viva talking points
+│   ├── ci_cd.md             # Day 13: Comprehensive CI/CD guide, workflow & viva prep
 │   ├── day09_architecture.md # Day 9: Agent, LangGraph, MemorySaver & HITL architecture
 │   ├── docker.md            # Day 12: Comprehensive Docker containerization guide
 │   ├── how_llms_work.md     # Day 5: Beginner-friendly LLM internals guide
