@@ -296,26 +296,81 @@ docker build -t kubecoach-ci .
 
 ---
 
-## 10. What is Intentionally Not Automated Yet
+## 10. GitHub Container Registry (GHCR) Publishing & Verification
+
+Following the successful execution of the CI pipeline on the `main` branch, the production Docker container image is automatically authenticated and published to **GitHub Container Registry (GHCR)** using the runner's built-in `GITHUB_TOKEN`.
+
+### 1. Published Container Details
+
+| Property | Value / Specification |
+| :--- | :--- |
+| **Container Registry** | `ghcr.io` (GitHub Container Registry) |
+| **Package / Image Name** | `ghcr.io/bhushanc23/genai` |
+| **Published Tags** | • `latest` (rolling production release)<br>• `7a390c1` (7-character Git commit SHA)<br>• `7a390c1153d263c9f654b2354737cad9d65d9243` (full 40-character SHA) |
+| **Image Digest** | `sha256:bdf9d5e4085ebc5ca6f0c8cde8a97d2322e2e215348f5019f58f412f5a1e7565` |
+| **Verified Workflow Run** | [Run #44894135101](https://github.com/BhushanC23/GenAI/actions/runs/44894135101) |
+| **Job Execution Status** | **Completed / Success (100% Green across all 13 steps)** |
+
+### 2. How to Pull the Published Image
+
+Developers, deployment clusters, and evaluators can pull the verified image directly from GHCR:
+
+```bash
+# Pull the latest verified release:
+docker pull ghcr.io/bhushanc23/genai:latest
+
+# Or pull the exact commit SHA release:
+docker pull ghcr.io/bhushanc23/genai:7a390c1
+```
+
+### 3. Authenticating to GHCR (If Image Visibility is Private)
+If the container package is set to private in repository settings:
+```bash
+# 1. Create a GitHub Personal Access Token (PAT) with `read:packages` scope.
+# 2. Authenticate Docker CLI to GHCR:
+echo $CR_PAT | docker login ghcr.io -u BhushanC23 --password-stdin
+```
+
+### 4. Branch & Pull Request Protection Policy
+- **Pull Requests targeting `main`:** Execute full CI (syntax check, Ruff linting, Pytest 150/150, Docker build), but **skip** image publishing.
+- **Feature Branches (`feature/**`):** Execute full CI validation, but **skip** image publishing.
+- **Main Branch (`main`):** Executes full CI and publishes verified Docker images to GHCR.
+
+---
+
+## 11. What is Intentionally Not Automated Yet
 
 To keep the pipeline simple, beginner-friendly, and cost-free, the following are intentionally deferred:
-- **Automatic Production Deployment:** Real cloud production environments (e.g. Render, AWS, GCP) are triggered via Blueprints or manual deployment gates rather than automatic redeployment on every commit.
-- **Image Push to Docker Hub / GitHub Container Registry:** Containers are built and validated in CI, but not published to a registry to avoid credential management overhead.
+- **Automatic Live Production Cluster Deployment:** Real cloud production environments (e.g. Render, AWS, GCP) are triggered via Blueprints or manual deployment gates rather than automatic redeployment on every commit.
 - **Complex Matrix Testing:** Multi-OS (Windows + macOS + Linux) testing is avoided; Linux (`ubuntu-latest`) matches production container runtimes.
 
 ---
 
-## 11. Security Principles Followed in Day 13
+## 12. Security Principles Followed in Day 13
 
 1. **Zero Secret Exposure:** No API keys (Groq, Gemini, ChromaDB) are hardcoded, logged, or required for CI tests.
 2. **Isolated Offline Tests:** All unit and integration tests use mock providers, preventing accidental quota consumption or network dependencies.
 3. **Build Context Hygiene:** [`.dockerignore`](../.dockerignore) strictly excludes `.env`, secrets, `.git`, and cache directories from entering container layers.
-4. **Least Privilege Execution:** The workflow specifies `permissions: contents: read`, restricting token capability to read-only.
+4. **Least Privilege Execution:** The workflow specifies `permissions: contents: read` and `permissions: packages: write`, restricting token capability strictly to reading code and pushing container packages.
 5. **Job Timeout Protection:** Configured `timeout-minutes: 15` ensures runaway processes are automatically terminated.
 
 ---
 
-## 12. Viva Questions & Model Answers
+## 13. Day 13 Actual Verification Checklist
+
+| Verification Item | Target Requirement | Actual Result | Verification Proof |
+| :--- | :--- | :--- | :--- |
+| **Python Syntax** | Bytecode compilation | **PASSED** | `compileall -q` clean exit (0 errors) |
+| **Code Style** | Ruff PEP 8 compliance | **PASSED** | `All checks passed!` (0 errors, 0 warnings) |
+| **Automated Tests** | 150 Pytest test cases | **PASSED** | 150 / 150 passed (100%) in 67.5s |
+| **Container Build** | Multi-stage Docker build | **PASSED** | Built with Docker Buildx in 2m 14s |
+| **GHCR Authentication** | `GITHUB_TOKEN` login | **PASSED** | Logged into `ghcr.io` successfully |
+| **GHCR Image Push** | Tagged & pushed to GHCR | **PASSED** | Pushed `latest`, `7a390c1`, and full SHA |
+| **Pipeline Status** | End-to-end execution | **SUCCESS** | GitHub Actions Run [#44894135101](https://github.com/BhushanC23/GenAI/actions/runs/44894135101) |
+
+---
+
+## 14. Viva Questions & Model Answers
 
 ### Q1: What is the primary purpose of Continuous Integration (CI)?
 **Answer:** Continuous Integration automates the testing and validation of code every time a developer pushes changes. Its main purpose is to catch bugs, syntax errors, and regressions early before code is merged into the main branch.

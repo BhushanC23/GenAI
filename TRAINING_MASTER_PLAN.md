@@ -571,7 +571,7 @@ Use this section as a human-maintained status summary. Update it after each trai
 | 10 | Streamlit/checkpoint 2 | Completed | Commit `37f08ad` | Tag `checkpoint-2`, UI, relationship strip, 14 tests |
 | 11 | Testing & QA | Completed | Commit `9334506` | Dual test runners (pytest/unittest), 150 tests passing (28 new QA tests), 74% coverage |
 | 12 | Docker, CI/CD & Deploy | Completed | Commit `0a4b5b6`, PR #1 (`8d0900f`) | CI (.github/workflows/ci.yml: ruff, pytest, docker build), PR #1 merged, live health URL, Docker & Compose |
-| 13 | GitHub Actions/CI | Implemented & Verified | `.github/workflows/ci.yml`, `docs/ci_cd.md` | CI (compileall, ruff, pytest 150/150, docker build), permissions: read, timeout 15m |
+| 13 | GitHub Actions/CI & GHCR | Completed | Commit `7a390c1`, Run `44894135101` | CI/CD (compileall, ruff, pytest 150/150, docker build, GHCR publish ghcr.io/bhushanc23/genai) |
 | 14 | Deployment/production/portfolio | Must verify | Official task card pending | Cloud deployment & security |
 | 15 | Final evaluation | Must verify | Official task card pending | Viva demo & portfolio |
 
