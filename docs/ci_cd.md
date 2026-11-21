@@ -128,9 +128,10 @@ on:
 ```yaml
 permissions:
   contents: read
+  packages: write
 ```
 - Restricts the runner's default `GITHUB_TOKEN` to read-only access on repository contents.
-- Prevents rogue packages or build scripts from writing to branches, tags, or repository settings.
+- Grants `packages: write` strictly for publishing verified Docker container images to GitHub Container Registry (GHCR).
 
 ### 3. Step 1: Checkout Repository
 ```yaml
@@ -197,12 +198,40 @@ permissions:
 
 - name: Build Docker Container
   run: |
-    docker build -t kubecoach-ci .
+    docker build -t kubecoach-ci:latest .
 ```
 - Sets up Docker Buildx on the runner.
 - Builds the production Docker image using [`Dockerfile`](../Dockerfile) and [`.dockerignore`](../.dockerignore).
 - Validates that the container image builds reproducibly without errors, missing files, or broken dependencies.
-- Does **not** push to any registry, keeping CI execution private and secure.
+
+### 10. Step 8: GHCR Authentication & Docker Publishing (Main Branch Only)
+```yaml
+- name: Log in to GitHub Container Registry (GHCR)
+  if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  uses: docker/login-action@v3
+  with:
+    registry: ghcr.io
+    username: ${{ github.actor }}
+    password: ${{ secrets.GITHUB_TOKEN }}
+
+- name: Tag and Push Docker Image to GHCR
+  if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  run: |
+    IMAGE_NAME=ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+    COMMIT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+    
+    docker tag kubecoach-ci:latest ${IMAGE_NAME}:latest
+    docker tag kubecoach-ci:latest ${IMAGE_NAME}:${COMMIT_SHA}
+    docker tag kubecoach-ci:latest ${IMAGE_NAME}:${{ github.sha }}
+    
+    echo "Publishing Docker images to GitHub Container Registry..."
+    docker push ${IMAGE_NAME}:latest
+    docker push ${IMAGE_NAME}:${COMMIT_SHA}
+    docker push ${IMAGE_NAME}:${{ github.sha }}
+```
+- **Conditional Execution:** Executes strictly on push to `main` branch. Pull requests and feature branches do NOT push to GHCR.
+- **Automated Tags:** Pushes both `latest`, 7-character short commit SHA, and 40-character full commit SHA.
+- **Repository Lowercasing:** Guarantees standard Docker compliance by lowercasing the target image (`ghcr.io/bhushanc23/genai`).
 
 ---
 

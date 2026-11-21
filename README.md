@@ -600,6 +600,9 @@ Detailed Docker guide and troubleshooting: **[`docs/docker.md`](docs/docker.md)*
 # A. Build the official Docker image
 docker build -t kubecoach .
 
+# Or pull the prebuilt production image directly from GitHub Container Registry (GHCR):
+docker pull ghcr.io/bhushanc23/genai:latest
+
 # B. Run FastAPI backend container on port 8000 (with persistent volume)
 docker run -d \
   --name kubecoach-container \
