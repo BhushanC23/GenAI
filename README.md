@@ -1,8 +1,19 @@
 # KubeCoach
 
+[![CI Pipeline](https://github.com/BhushanC23/GenAI/actions/workflows/ci.yml/badge.svg)](https://github.com/BhushanC23/GenAI/actions/workflows/ci.yml)
+[![Live Health Check](https://img.shields.io/badge/Health%20Check-Live%20OK-brightgreen)](https://kubecoach.onrender.com/health)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/BhushanC23/GenAI)
+
 ### Project ID: SJ-58
 ### Theme: Developer Tools
 ### Student: Bhushan Kailas Chaturbhuj (Reg. No: 2125PCAM1038)
+
+> **Live Deployment & Continuous Integration:**  
+> - **Live Health Check URL:** [`https://kubecoach.onrender.com/health`](https://kubecoach.onrender.com/health)  
+> - **Live Interactive Swagger Docs:** [`https://kubecoach.onrender.com/docs`](https://kubecoach.onrender.com/docs)  
+> - **Streamlit Live Web App:** [`https://huggingface.co/spaces/BhushanC23/KubeCoach`](https://huggingface.co/spaces/BhushanC23/KubeCoach)  
+> - **Merged Pull Request:** [PR #1 (Day 12 CI/CD & Docker Pipeline)](https://github.com/BhushanC23/GenAI/pull/1)  
+> - **CI Workflow:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (Ruff Lint, 150 Pytests, Docker Container Build)
 
 ## About
 KubeCoach is an AI-powered educational developer learning tool designed to explain Kubernetes concepts and kubectl commands in simple English using official Kubernetes documentation.
@@ -356,9 +367,26 @@ Comprehensive Testing Guide & Coverage Documentation: **[`docs/testing.md`](docs
   - **Failed:** **0**
   - **Execution Time:** ~59.5s (`unittest`) / ~85.8s (`pytest --cov`)
 
-## Day 12 Progress — Docker Containerization
+## Day 12 Progress — Docker Containerization, GitHub Actions CI & Live Deployment
 
 Comprehensive Docker Containerization & Deployment Guide: **[`docs/docker.md`](docs/docker.md)**
+
+- **GitHub Actions Automated CI/CD Pipeline ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)):**
+  - Fully automated CI pipeline triggered on `push` and `pull_request` against `main` and `feature/**` branches.
+  - **Linter Stage (`ruff check .`):** Configured via [`ruff.toml`](ruff.toml) to enforce clean PEP 8 coding standards and zero warnings.
+  - **Test Suite Stage (`pytest tests/`):** Runs all 150 regression and integration tests with coverage reporting.
+  - **Docker Build Stage (`docker build`):** Verifies deterministic and error-free container image compilation directly on Ubuntu GitHub Actions runners.
+  - **Status:** **All checks green and passing.**
+
+- **Feature Branching & Merged Pull Request Workflow:**
+  - Implemented professional Git team branching standards using dedicated feature branch `feature/day-12-ci-cd`.
+  - Opened and successfully merged Pull Request **[PR #1: day-12: GitHub Actions CI pipeline, Ruff linting, and Docker container build](https://github.com/BhushanC23/GenAI/pull/1)** following green CI validation.
+
+- **Cloud Deployment & Live Service Endpoints:**
+  - Configured zero-touch Render Blueprint ([`render.yaml`](render.yaml)) supporting continuous deployment on push.
+  - **Live /health Endpoint:** [`https://kubecoach.onrender.com/health`](https://kubecoach.onrender.com/health) (returns `{"status": "ok", "app": "KubeCoach API"}`).
+  - **Live Interactive Docs:** [`https://kubecoach.onrender.com/docs`](https://kubecoach.onrender.com/docs) (Swagger UI).
+  - **Live Web Interface:** [`https://huggingface.co/spaces/BhushanC23/KubeCoach`](https://huggingface.co/spaces/BhushanC23/KubeCoach) (Streamlit).
 
 - **Production-Ready Docker Architecture ([`Dockerfile`](Dockerfile)):**
   - Built on official, security-patched `python:3.11-slim` base image for a lightweight footprint and Debian binary compatibility.
@@ -389,6 +417,9 @@ Comprehensive Docker Containerization & Deployment Guide: **[`docs/docker.md`](d
 
 ```text
 GenAI/
+├── .github/
+│   └── workflows/
+│       └── ci.yml           # Day 12: GitHub Actions CI pipeline (Ruff, Pytest, Docker)
 ├── .streamlit/
 │   └── config.toml          # Day 10: Streamlit dark developer theme configuration
 ├── app/
@@ -463,7 +494,9 @@ GenAI/
 ├── docker-entrypoint.sh     # Day 12: Multi-mode container runtime entrypoint
 ├── Dockerfile               # Day 12: Python 3.11-slim non-root container image specification
 ├── pytest.ini               # Day 11: Pytest test runner configuration
-├── requirements.txt         # Project dependencies (FastAPI, Streamlit, LangGraph, Pytest, etc.)
+├── render.yaml              # Day 12: Render cloud deployment Blueprint specification
+├── requirements.txt         # Project dependencies (FastAPI, Streamlit, LangGraph, Pytest, Ruff)
+├── ruff.toml                # Day 12: Ruff linter configuration & code standards
 ├── README.md                # Documentation
 └── .gitignore
 ```
@@ -565,7 +598,29 @@ docker logs -f kubecoach-container
 docker stop kubecoach-container && docker rm kubecoach-container
 ```
 
-### 6. Example API Requests
+### 6. Live Cloud Deployment & Continuous Delivery (Day 12)
+
+KubeCoach is deployed and publicly accessible in the cloud with live health monitoring and interactive endpoints:
+
+| Endpoint | Method | Live URL | Description |
+| :--- | :--- | :--- | :--- |
+| **Live Health Check** | `GET` | [`https://kubecoach.onrender.com/health`](https://kubecoach.onrender.com/health) | Real-time cluster health and record count status |
+| **Interactive API Documentation** | `GET` | [`https://kubecoach.onrender.com/docs`](https://kubecoach.onrender.com/docs) | Interactive Swagger UI for live API testing |
+| **RAG Knowledge Retrieval** | `POST` | [`https://kubecoach.onrender.com/ask`](https://kubecoach.onrender.com/ask) | Grounded Kubernetes Q&A with citations |
+| **Agent HITL Workflow** | `POST` | [`https://kubecoach.onrender.com/agent`](https://kubecoach.onrender.com/agent) | LangGraph autonomous agent with human approval |
+| **Streamlit Interactive UI** | Web | [`https://huggingface.co/spaces/BhushanC23/KubeCoach`](https://huggingface.co/spaces/BhushanC23/KubeCoach) | Live web interface for students and developers |
+
+#### 1-Click Cloud Deployment via Render Blueprint
+Deploy this exact repository directly to Render using the preconfigured [`render.yaml`](render.yaml):
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/BhushanC23/GenAI)
+
+```bash
+# Verify live deployment health check via cURL:
+curl -X GET https://kubecoach.onrender.com/health
+```
+
+### 7. Example API Requests
 
 ```bash
 # Health check (includes provider status)

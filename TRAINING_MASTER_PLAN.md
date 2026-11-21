@@ -370,8 +370,8 @@ Upgrade `/search` to use smart/TF-IDF search as assigned.
 
 **Commit prefix:** `day-11:`
 
-### Day 12 — Docker Containerization
-**Source:** Official Day 12 Task Prompt provided by student on November 20, 2026.
+### Day 12 — Docker Containerization, GitHub Actions CI & Live Deployment
+**Source:** Evaluator Progress Tracker & Daily Review (Fri 20 Nov 2026).
 
 **Topics & Objectives**
 - Docker images, containers, Dockerfile syntax, build layers, and caching
@@ -381,14 +381,22 @@ Upgrade `/search` to use smart/TF-IDF search as assigned.
 - Multi-mode runtime entrypoint script (`docker-entrypoint.sh` supporting `api`, `ui`, `all`, `test`)
 - Multi-service orchestration with `docker-compose.yml` (FastAPI backend + Streamlit frontend)
 - Persistent volume storage for datasets & ChromaDB (`kubecoach_data:/app/data`)
+- Automated CI pipeline ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) running `ruff check .`, `pytest`, and `docker build`
+- Git feature branch workflow (`feature/day-12-ci-cd`), opening and merging Pull Request [#1](https://github.com/BhushanC23/GenAI/pull/1) upon green CI
+- CI status badge and live deployment URL ([`https://kubecoach.onrender.com/health`](https://kubecoach.onrender.com/health)) in `README.md`
+- Cloud deployment configuration via Render Blueprint (`render.yaml`)
 
 **Deliverables**
+- `.github/workflows/ci.yml` (GitHub Actions CI pipeline with Ruff, Pytest, and Docker build)
+- `ruff.toml` (Ruff linter configuration passing 100% clean)
+- `render.yaml` (Render Blueprint for 1-click cloud deployment)
+- Merged Pull Request [#1](https://github.com/BhushanC23/GenAI/pull/1) from `feature/day-12-ci-cd` to `main`
 - `Dockerfile` (lightweight, non-root, layer-cached image with healthcheck)
 - `.dockerignore` (build context exclusion rules)
 - `docker-entrypoint.sh` (multi-mode container entrypoint)
 - `docker-compose.yml` (backend + frontend orchestration)
 - `docs/docker.md` (comprehensive Docker guide, lifecycle commands, volume explanation, troubleshooting)
-- `README.md` (updated Docker quickstart and documentation links)
+- `README.md` (updated with CI badge, live healthcheck URL, and Docker documentation)
 
 **Commit prefix:** `day-12:`
 
@@ -554,7 +562,7 @@ Use this section as a human-maintained status summary. Update it after each trai
 | 9 | Agent/LangGraph/tools | Completed | Commit `04dc2b1` | Quantity converter, ReAct, LangGraph HITL, 29 tests |
 | 10 | Streamlit/checkpoint 2 | Completed | Commit `37f08ad` | Tag `checkpoint-2`, UI, relationship strip, 14 tests |
 | 11 | Testing & QA | Completed | Commit `9334506` | Dual test runners (pytest/unittest), 150 tests passing (28 new QA tests), 74% coverage |
-| 12 | Docker | Implemented & Configured | `Dockerfile`, `docker-compose.yml`, `docs/docker.md` | Python 3.11-slim, non-root, multi-mode entrypoint, volumes, ports 8000/8501 |
+| 12 | Docker, CI/CD & Deploy | Completed | Commit `0a4b5b6`, PR #1 (`8d0900f`) | CI (.github/workflows/ci.yml: ruff, pytest, docker build), PR #1 merged, live health URL, Docker & Compose |
 | 13 | GitHub Actions/CI | Must verify | Official task card pending | CI/CD automated workflow |
 | 14 | Deployment/production/portfolio | Must verify | Official task card pending | Cloud deployment & security |
 | 15 | Final evaluation | Must verify | Official task card pending | Viva demo & portfolio |
