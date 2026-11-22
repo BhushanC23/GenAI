@@ -400,23 +400,29 @@ Upgrade `/search` to use smart/TF-IDF search as assigned.
 
 **Commit prefix:** `day-12:`
 
-### Day 13 — GitHub Actions and CI/CD Automation
-**Source:** Official Day 13 Task Prompt provided by student on November 21, 2026.
+### Day 13 — CI/CD Automation, Observability, Production Notes & Portfolio Resume
+**Source:** Official Day 13 Task Prompt & Evaluator Review Criteria provided by student on November 21–22, 2026.
 
 **Topics & Objectives**
 - Continuous Integration (CI), Continuous Delivery (CD), and Continuous Deployment concepts
 - GitHub Actions architecture: Workflows, Triggers, Jobs, Steps, Runners, Actions, and Artifacts
-- Least privilege workflow permissions (`permissions: contents: read`) and job timeouts (`timeout-minutes: 15`)
+- Least privilege workflow permissions (`permissions: contents: read`, `packages: write`) and job timeouts (`timeout-minutes: 15`)
 - Automated bytecode syntax validation using `python -m compileall -q`
 - Automated PEP 8 code quality linting via `ruff check .`
-- Automated test execution with 150 isolated pytest unit & integration tests (`pytest tests/ --cov=app`)
-- Docker container build validation in CI (`docker build -t kubecoach-ci .`) without registry push
-- Comprehensive documentation, troubleshooting, local validation steps, and viva preparation in `docs/ci_cd.md`
+- Automated test execution with 154 isolated pytest unit & integration tests (`pytest tests/ --cov=app`)
+- Docker container build validation in CI and automated publishing to GitHub Container Registry (`ghcr.io/bhushanc23/genai:latest`)
+- Production Observability: Sub-millisecond latency tracking (`latency_ms`) and token usage telemetry (`token_usage: {prompt_tokens, completion_tokens, total_tokens}`) in `POST /ask`
+- In-Memory Query Caching: Normalized query cache (`_RAG_CACHE`) with LRU/FIFO eviction and operational endpoints (`GET /cache/stats`, `POST /cache/clear`)
+- Production Notes & System Architecture: Benchmark profiling (P50/P95 latency, token usage, cost per 1K queries) and Results Comparison Table in `README.md`
+- Portfolio & Resume Preparation: Authored `docs/resume.md` with 3 high-impact, metric-driven KubeCoach resume bullets
 
 **Deliverables**
-- `.github/workflows/ci.yml` (enhanced with syntax validation, timeouts, least privilege, and container build)
+- `.github/workflows/ci.yml` (enhanced with syntax validation, timeouts, least privilege, container build, and GHCR publishing)
+- `app/main.py` (enhanced with `latency_ms`, `token_usage`, in-memory cache on `POST /ask`, and `GET /cache/stats`)
+- `tests/test_day13.py` (4 automated tests verifying latency tracking, token usage, cache hits, and cache stats/clear)
 - `docs/ci_cd.md` (comprehensive CI/CD guide, comparison table, Mermaid flowchart, glossary, troubleshooting, and 10 viva questions)
-- `README.md` (updated Day 13 CI/CD progress section and documentation links)
+- `docs/resume.md` (3 core KubeCoach resume bullets, skills matrix, telemetry metrics, and viva defense)
+- `README.md` (updated Day 13 section, Production notes with numbers, Results comparison table, Mermaid architecture, and resume links)
 
 **Commit prefix:** `day-13:`
 

@@ -9,6 +9,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 import sys
+import time
 from typing import Any, Dict, List, Optional
 import uuid
 
@@ -180,7 +181,7 @@ class AskRequest(BaseModel):
 
 
 class AskResponse(BaseModel):
-    """Schema for grounded RAG response with citations and retrieved chunks."""
+    """Schema for grounded RAG response with citations, retrieved chunks, and observability metrics."""
 
     question: str = Field(..., description="The original student question.")
     answer: str = Field(..., description="Grounded plain-English explanation.")
@@ -188,6 +189,9 @@ class AskResponse(BaseModel):
     retrieved_chunks: List[Dict[str, Any]] = Field(default_factory=list, description="Raw chunks retrieved from vector store.")
     confidence: str = Field(..., description="Confidence level: high, medium, or low.")
     context_sufficient: bool = Field(..., description="Whether retrieved context was sufficient to answer.")
+    latency_ms: Optional[float] = Field(default=None, description="Measured end-to-end response latency in milliseconds.")
+    token_usage: Optional[Dict[str, int]] = Field(default=None, description="Measured/estimated token usage (prompt_tokens, completion_tokens, total_tokens).")
+    cached: Optional[bool] = Field(default=False, description="Whether this response was served from in-memory cache.")
 
 
 class AgentRequest(BaseModel):
@@ -301,6 +305,7 @@ def root() -> Dict[str, str]:
         "semantic_search_url": "/search/semantic?q=pod",
         "chat_url": "/chat",
         "ask_url": "/ask",
+        "cache_stats_url": "/cache/stats",
         "agent_url": "/agent",
         "agent_approve_url": "/agent/approve",
         "feedback_url": "/feedback",
@@ -557,6 +562,15 @@ def chat_with_kubecoach(payload: ChatRequest) -> ChatResponse:
         )
 
 
+# In-memory query cache for /ask endpoint: normalized_key -> {response_data}
+_RAG_CACHE: Dict[str, Dict[str, Any]] = {}
+_CACHE_STATS: Dict[str, int] = {
+    "hits": 0,
+    "misses": 0,
+    "total_requests": 0,
+}
+
+
 @app.post(
     "/ask",
     response_model=AskResponse,
@@ -568,7 +582,10 @@ def ask_kubecoach_rag(payload: AskRequest) -> AskResponse:
 
     Retrieves top-k documentation chunks from persistent ChromaDB, evaluates context
     sufficiency, and generates a grounded response with official citations.
+    Includes production latency measurement, token usage telemetry, and in-memory caching.
     """
+    start_time = time.perf_counter()
+
     question_text = payload.question.strip()
     if not question_text:
         raise HTTPException(
@@ -583,6 +600,34 @@ def ask_kubecoach_rag(payload: AskRequest) -> AskResponse:
             detail="top_k must be between 1 and 20.",
         )
 
+    # In-memory cache lookup (normalized query key)
+    cache_key = f"{question_text.lower()}_{top_k}"
+    if cache_key in _RAG_CACHE:
+        _CACHE_STATS["hits"] += 1
+        _CACHE_STATS["total_requests"] += 1
+        latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
+        cached_entry = _RAG_CACHE[cache_key]
+
+        logger.info(
+            "[CACHE HIT] /ask query='%s' latency=%.2fms cached=True",
+            question_text,
+            latency_ms,
+        )
+
+        return AskResponse(
+            question=cached_entry["question"],
+            answer=cached_entry["answer"],
+            citations=cached_entry["citations"],
+            retrieved_chunks=cached_entry["retrieved_chunks"],
+            confidence=cached_entry["confidence"],
+            context_sufficient=cached_entry["context_sufficient"],
+            latency_ms=latency_ms,
+            token_usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            cached=True,
+        )
+
+    _CACHE_STATS["misses"] += 1
+    _CACHE_STATS["total_requests"] += 1
     logger.info("RAG ask request received: '%s' (top_k=%d)", question_text, top_k)
 
     try:
@@ -603,6 +648,43 @@ def ask_kubecoach_rag(payload: AskRequest) -> AskResponse:
             for c in rag_result.citations
         ]
 
+        latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+        # Estimate/measure token telemetry
+        prompt_char_count = sum(len(c.get("text", "")) for c in rag_result.retrieved_chunks) + len(question_text)
+        prompt_tokens = max(1, prompt_char_count // 4)
+        completion_tokens = max(1, len(rag_result.answer) // 4)
+        total_tokens = prompt_tokens + completion_tokens
+
+        token_usage = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+        }
+
+        logger.info(
+            "[OBSERVABILITY] /ask query='%s' latency=%.2fms prompt_tokens=%d completion_tokens=%d total_tokens=%d cached=False",
+            question_text,
+            latency_ms,
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+        )
+
+        # Store in cache (cap at 500 entries)
+        if len(_RAG_CACHE) >= 500:
+            oldest_key = next(iter(_RAG_CACHE))
+            _RAG_CACHE.pop(oldest_key, None)
+
+        _RAG_CACHE[cache_key] = {
+            "question": rag_result.question,
+            "answer": rag_result.answer,
+            "citations": citation_items,
+            "retrieved_chunks": rag_result.retrieved_chunks,
+            "confidence": rag_result.confidence,
+            "context_sufficient": rag_result.context_sufficient,
+        }
+
         return AskResponse(
             question=rag_result.question,
             answer=rag_result.answer,
@@ -610,6 +692,9 @@ def ask_kubecoach_rag(payload: AskRequest) -> AskResponse:
             retrieved_chunks=rag_result.retrieved_chunks,
             confidence=rag_result.confidence,
             context_sufficient=rag_result.context_sufficient,
+            latency_ms=latency_ms,
+            token_usage=token_usage,
+            cached=False,
         )
 
     except VectorStoreError as vs_err:
@@ -648,6 +733,45 @@ def ask_kubecoach_rag(payload: AskRequest) -> AskResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal server error occurred while processing RAG request.",
         )
+
+
+@app.get(
+    "/cache/stats",
+    tags=["Observability"],
+    summary="Get RAG Query Cache Statistics",
+)
+def get_cache_stats() -> Dict[str, Any]:
+    """Retrieve operational metrics for the in-memory RAG query cache."""
+    hits = _CACHE_STATS["hits"]
+    misses = _CACHE_STATS["misses"]
+    total = _CACHE_STATS["total_requests"]
+    hit_ratio = round(hits / total, 4) if total > 0 else 0.0
+    return {
+        "status": "ok",
+        "cache_size": len(_RAG_CACHE),
+        "hits": hits,
+        "misses": misses,
+        "total_requests": total,
+        "hit_ratio": hit_ratio,
+    }
+
+
+@app.post(
+    "/cache/clear",
+    tags=["Observability"],
+    summary="Clear RAG Query Cache",
+)
+def clear_rag_cache() -> Dict[str, Any]:
+    """Clear all cached RAG queries and reset metrics (useful for testing and memory hygiene)."""
+    cleared_count = len(_RAG_CACHE)
+    _RAG_CACHE.clear()
+    _CACHE_STATS["hits"] = 0
+    _CACHE_STATS["misses"] = 0
+    _CACHE_STATS["total_requests"] = 0
+    return {
+        "status": "cleared",
+        "cleared_items": cleared_count,
+    }
 
 
 def _build_agent_response(result: Dict[str, Any], fallback_question: str = "") -> AgentResponse:
