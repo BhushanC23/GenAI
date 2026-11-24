@@ -3,6 +3,7 @@
 **Project:** KubeCoach (Project ID SJ-58, theme Developer Tools), "Learn Kubernetes in Simple English"
 **Student:** Bhushan Kailas Chaturbhuj (MCA, Sanjivani University)
 **Repository:** https://github.com/BhushanC23/GenAI (branch `main`)
+**60-second pitch video:** https://drive.google.com/file/d/1PcXR_lxLfDsm9kGdhBmdCaZRuM7hVzwU/view?usp=sharing (sharing must be set to "Anyone with the link" for reviewers; **Requires manual verification**)
 **Last updated:** Day 14 (24 Nov 2026)
 
 **Objective.** An AI learning assistant that explains Kubernetes in simple English, grounded in official Kubernetes documentation. It combines TF-IDF and semantic search, a retrieval-augmented generation (RAG) pipeline with citations and an honest "I don't know", a LangGraph agent with a deterministic CPU/memory quantity converter and human approval, a FastAPI backend and a Streamlit interface.

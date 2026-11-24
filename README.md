@@ -16,6 +16,7 @@
 > - **CI Workflow:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (compileall, Ruff lint, Pytest, Docker build, GHCR publish on `main`)  
 > - **Professional Resume & Portfolio:** [`docs/resume.md`](docs/resume.md) (3 Core KubeCoach Bullets & Production Metrics)  
 > - **Final audit, interview prep and status tracker (Day 14):** [`PROGRESS.md`](PROGRESS.md), [`docs/interview.md`](docs/interview.md)
+> - **60-second KubeCoach pitch video (Day 14):** [Watch on Google Drive](https://drive.google.com/file/d/1PcXR_lxLfDsm9kGdhBmdCaZRuM7hVzwU/view?usp=sharing)
 
 > **Verification status (checked on Day 14):** GitHub Actions runs #8 (commit `7b4b5ce`) and #9 (Day 14 commit `c80b4c4`) on `main` completed successfully, including the Docker build and the GHCR image push. The Render and Hugging Face links above could **not** be verified from the audit machine (Render did not answer within 30 s, which can be a free-tier cold start; Hugging Face returned HTTP 401). Open them in a browser before presenting them as live.
 

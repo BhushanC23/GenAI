@@ -3,6 +3,7 @@
 **Candidate:** Bhushan Kailas Chaturbhuj, MCA, Sanjivani University
 **Project:** KubeCoach (SJ-58), Developer Tools: "Learn Kubernetes in Simple English"
 **Repository:** https://github.com/BhushanC23/GenAI
+**60-second pitch video:** [Watch on Google Drive](https://drive.google.com/file/d/1PcXR_lxLfDsm9kGdhBmdCaZRuM7hVzwU/view?usp=sharing)
 
 Every technical statement in this file was checked against the code in this repository or against a command run during the Day 14 audit. Where something is *not* verified, the text says so. Read [section G](#g-what-i-must-be-able-to-explain-independently) before any interview.
 
@@ -11,6 +12,8 @@ Contents: [A. Pitch](#a-60-second-project-pitch) | [B. Hardest problem](#b-my-ha
 ---
 
 ## A. 60-Second Project Pitch
+
+**Recorded video:** https://drive.google.com/file/d/1PcXR_lxLfDsm9kGdhBmdCaZRuM7hVzwU/view?usp=sharing
 
 > KubeCoach is a learning assistant that explains Kubernetes in simple English. The official Kubernetes documentation is accurate but dense, so beginners, such as students preparing for DevOps interviews, find it hard to learn what an object does and which `kubectl` command to run.
 >
