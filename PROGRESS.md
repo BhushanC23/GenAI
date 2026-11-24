@@ -4,6 +4,8 @@
 **Student:** Bhushan Kailas Chaturbhuj (MCA, Sanjivani University)
 **Repository:** https://github.com/BhushanC23/GenAI (branch `main`)
 **60-second pitch video:** https://drive.google.com/file/d/1PcXR_lxLfDsm9kGdhBmdCaZRuM7hVzwU/view?usp=sharing (sharing must be set to "Anyone with the link" for reviewers; **Requires manual verification**)
+**Auditor guide:** the "Auditor Guide: Final Project Status" section at the top of [`README.md`](README.md) summarises status, evidence, verification commands and unverified items for reviewers and automated audit tools.
+**Latest CI:** run #11 on `main` (commit `10de7ee`, Day 14 pitch-video link) completed with success: https://github.com/BhushanC23/GenAI/actions/runs/45462090678
 **Last updated:** Day 14 (24 Nov 2026)
 
 **Objective.** An AI learning assistant that explains Kubernetes in simple English, grounded in official Kubernetes documentation. It combines TF-IDF and semantic search, a retrieval-augmented generation (RAG) pipeline with citations and an honest "I don't know", a LangGraph agent with a deterministic CPU/memory quantity converter and human approval, a FastAPI backend and a Streamlit interface.

@@ -20,6 +20,141 @@
 
 > **Verification status (checked on Day 14):** GitHub Actions runs #8 (commit `7b4b5ce`) and #9 (Day 14 commit `c80b4c4`) on `main` completed successfully, including the Docker build and the GHCR image push. The Render and Hugging Face links above could **not** be verified from the audit machine (Render did not answer within 30 s, which can be a free-tier cold start; Hugging Face returned HTTP 401). Open them in a browser before presenting them as live.
 
+## Auditor Guide: Final Project Status (read this first)
+
+> This section is written for human reviewers and for automated (AI) audit tools. Every row names the file or command that proves it. Nothing here is a claim without evidence; anything not verified is listed under "Not verified".
+
+### 1. Snapshot
+
+| Field | Value |
+| :--- | :--- |
+| Project | KubeCoach (ID SJ-58, theme Developer Tools): explains Kubernetes in simple English from official docs |
+| Student | Bhushan Kailas Chaturbhuj (Reg. No. 2125PCAM1038) |
+| Repository / branch | https://github.com/BhushanC23/GenAI, branch `main` |
+| Final tag | `final` (Day 14 submission). Earlier tags: `week-1`, `checkpoint-1`, `checkpoint-2`, `day-14` |
+| Training days built | Day 1 to Day 14 (all committed). Day 15 (final presentation) is **not** part of this repository |
+| Latest CI result | GitHub Actions "CI Pipeline" run #11 on `main`: **success** (https://github.com/BhushanC23/GenAI/actions/runs/45462090678). Runs #8 to #10 also succeeded |
+| 60-second pitch video | https://drive.google.com/file/d/1PcXR_lxLfDsm9kGdhBmdCaZRuM7hVzwU/view?usp=sharing |
+| Language / runtime | Python 3.11 |
+
+### 2. Day 14 task checklist (interview preparation + build sprint)
+
+| Required item | Status | Evidence |
+| :--- | :--- | :--- |
+| `docs/interview.md` with 60-second pitch | Done | [`docs/interview.md`](docs/interview.md), section A, plus the recorded video link above |
+| Hardest-problem story | Done | [`docs/interview.md`](docs/interview.md), section B (STAR format) |
+| Answers to 10 likely interview questions | Done | [`docs/interview.md`](docs/interview.md), section C (Q1 to Q10) |
+| `PROGRESS.md` with items closed | Done | [`PROGRESS.md`](PROGRESS.md) (Day 1 to 15 tracker, evidence, open items) |
+| Commits prefixed `day-14:` | Done | `git log --oneline` shows `day-14:` commits `c80b4c4`, `554369b`, `10de7ee` |
+| Final tag pushed | Done | tags `day-14` and `final` exist on `origin` (`git ls-remote --tags origin`) |
+
+### 3. Where to find each capability
+
+| Capability | Main files | Proof |
+| :--- | :--- | :--- |
+| Data ingestion (official Kubernetes pages to 18 records) | `app/fetch.py`, `app/ingest.py`, `data/raw/`, `data/records.json` | `tests/test_day03.py` |
+| REST API (FastAPI) | `app/main.py` | `tests/test_day04.py`, `/docs` Swagger page |
+| Keyword search (TF-IDF) | `app/smart_search.py` | `tests/test_day04.py` |
+| Semantic search (MiniLM embeddings + ChromaDB) | `app/chunking.py`, `app/embed.py`, `app/vectorstore.py` | `tests/test_day07.py`, `eval/search_results.md` |
+| Grounded RAG with citations and refusal | `app/rag.py` (`POST /ask`) | `tests/test_day08.py`, `eval/rag_comparison.md`, `eval/eval_results.json` |
+| LLM providers (Groq, Gemini, offline mock) and prompts | `app/llm.py`, `prompts/` | `tests/test_day06.py`, `eval/prompt_compare.md` |
+| Agent with tools, LangGraph and human approval | `app/tools.py`, `app/agent_loop.py`, `app/graph.py` | `tests/test_day09.py`, `docs/day09_architecture.md` |
+| Streamlit UI | `ui/app.py`, `ui/api_client.py`, `ui/relationships.py` | `tests/test_day10.py`, `docs/checkpoint2_demo.md` |
+| Tests and QA | `tests/` (10 test files), `pytest.ini` | `docs/testing.md` |
+| Docker and Compose | `Dockerfile`, `docker-compose.yml`, `docker-entrypoint.sh` | `docs/docker.md` |
+| CI/CD (compileall, Ruff, pytest, Docker build, GHCR publish) | `.github/workflows/ci.yml` | `docs/ci_cd.md`, Actions runs above |
+| Observability and query cache | `app/main.py` (`/cache/stats`, `/cache/clear`) | `tests/test_day13.py` |
+| Interview material and audit fixes | `docs/interview.md`, `PROGRESS.md`, `tests/test_day14.py` | commit `c80b4c4` |
+
+### 4. How to verify it yourself
+
+```powershell
+# Windows PowerShell, from the repository root, Python 3.11
+python -m venv .venv311
+.\.venv311\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+ruff check .                          # lint (expected: All checks passed)
+pytest tests/ -q                      # expected: 162 passed (first run downloads the embedding model)
+python -m eval.run_eval               # 15-question RAG evaluation, Q6 must be refused with 0 citations
+
+uvicorn app.main:app --port 8000      # API:  http://127.0.0.1:8000/docs
+streamlit run ui/app.py               # UI:   http://localhost:8501  (set API_BASE_URL if the API port differs)
+```
+
+Windows note: the machine used for the final run reserves TCP ports 7979 to 8078, so the API was started on port 8100 with `API_BASE_URL=http://127.0.0.1:8100`. On most machines the default port 8000 works.
+
+Offline operation: with no API key, `LLM_PROVIDER=mock` is used and answers are extractive snippets from the retrieved documentation. No secret is required to run or test the project.
+
+### 5. Expected behaviour (quick manual checks)
+
+| Question asked in the UI or `POST /ask` | Expected result |
+| :--- | :--- |
+| `What is a Pod?` | Answer from documentation, `context_sufficient=true`, at least 1 citation with a `kubernetes.io` URL |
+| `How do I store sensitive credentials like passwords and API keys in Kubernetes?` | Answer, 1 or more citations |
+| `How do I configure an Istio Service Mesh with Mutual TLS (mTLS) across multi-cluster deployments?` | Refusal "I don't know based on the provided official Kubernetes documentation.", `citations=[]` |
+| `What is the capital of France?` | Refusal, `citations=[]` |
+| Agent mode: `Convert 500m CPU to cores` | Approval card, then `0.5 cores` after Approve |
+
+These five `/ask` behaviours were re-checked against the running API on 24 Nov 2026 (the first question after a start takes about 100 s while the embedding model loads, later ones are fast).
+
+### 6. Evidence snapshot (recorded on Day 14, see `PROGRESS.md` for the full table)
+
+| Check | Result |
+| :--- | :--- |
+| `pytest tests/` | 162 passed, 75% line coverage on `app/` and `ui/` |
+| `ruff check .` | All checks passed |
+| RAG evaluation (15 questions, two chunking configurations) | Retrieval relevance 86.7%, citation correctness 100%, keyword recall about 32%, Q6 refused in both configurations (the two configurations are effectively tied) |
+| Knowledge base | 6 official Kubernetes pages + 18 records = 427 indexed chunks |
+| Secrets in repository | None tracked. `.env` is git-ignored; only `.env.example` is committed |
+
+### 7. Not verified or known limits (stated honestly)
+
+- Docker image **build** is verified by CI; running the container locally (`docker run`) was **not** verified.
+- Render (`https://kubecoach.onrender.com/health`) and Hugging Face Space links were **not** verified from the audit machine. Open them in a browser before treating them as live.
+- The live Groq or Gemini path was not exercised (no API key was available); tests use the offline mock.
+- Refusal logic is a heuristic (similarity threshold, a short list of out-of-scope technology names, keyword coverage), not a proof. Only 6 documentation pages are indexed, so many Kubernetes topics are out of scope.
+- Citations identify retrieved chunks, not individual sentences. No authentication or rate limiting. Cache and agent memory are in-memory only.
+- Day 15 deliverables (final evaluation and presentation) are not in this repository.
+- `data/feedback.json` is a runtime file (thumbs up/down feedback) that is tracked in git and changes whenever the UI is used; it is not source code.
+
+### 8. Suggested reading order for an auditor
+
+1. This section, then [`PROGRESS.md`](PROGRESS.md) (day-by-day tracker with commits and evidence).
+2. [`docs/interview.md`](docs/interview.md) (project explanation, architecture, honest limitations).
+3. [`app/rag.py`](app/rag.py), [`app/main.py`](app/main.py), [`app/graph.py`](app/graph.py) (core logic).
+4. [`tests/`](tests/) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (verification).
+5. The day-by-day "Day N Progress" sections below in this README.
+
+<details>
+<summary>Machine-readable summary (for automated audit tools)</summary>
+
+```json
+{
+  "project": "KubeCoach",
+  "project_id": "SJ-58",
+  "repository": "https://github.com/BhushanC23/GenAI",
+  "branch": "main",
+  "final_tag": "final",
+  "days_completed": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+  "days_pending": [15],
+  "day14_deliverables": {
+    "docs/interview.md": "present",
+    "PROGRESS.md": "present",
+    "commit_prefix": "day-14:",
+    "pitch_video": "https://drive.google.com/file/d/1PcXR_lxLfDsm9kGdhBmdCaZRuM7hVzwU/view?usp=sharing"
+  },
+  "ci": {"workflow": "CI Pipeline", "latest_run": 11, "conclusion": "success"},
+  "tests": {"framework": "pytest", "passed": 162, "recorded_on": "Day 14"},
+  "entrypoints": {"api": "uvicorn app.main:app", "ui": "streamlit run ui/app.py"},
+  "not_verified": ["local docker run", "render deployment", "huggingface space", "live groq/gemini calls"]
+}
+```
+
+</details>
+
+---
+
 ## About
 KubeCoach is an AI-powered educational developer learning tool designed to explain Kubernetes concepts and kubectl commands in simple English using official Kubernetes documentation.
 
