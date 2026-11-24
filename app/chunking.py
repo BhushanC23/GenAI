@@ -38,6 +38,11 @@ def clean_markdown_for_chunking(text: str) -> str:
     if not text:
         return ""
 
+    # Drop the leading YAML frontmatter block (--- ... ---). It is page metadata
+    # (title, reviewers, weight), not documentation content, and it should not be
+    # embedded, retrieved or shown to students as part of an answer.
+    text = re.sub(r"\A\s*---[ \t]*\n.*?\n---[ \t]*(?:\n|\Z)", "", text, count=1, flags=re.DOTALL)
+
     # Replace Hugo glossary tooltips with display text or term_id
     text = re.sub(r'\{\{<\s*glossary_tooltip[^>]*text="([^"]+)"[^>]*>\}\}', r"\1", text)
     text = re.sub(r'\{\{<\s*glossary_tooltip[^>]*term_id="([^"]+)"[^>]*>\}\}', r"\1", text)

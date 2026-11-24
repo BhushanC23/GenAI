@@ -158,20 +158,58 @@ class KubeCoachVectorStore:
     ) -> int:
         """Index all raw documents and knowledge records into the vector collection.
 
-        If force_reindex is False and the collection already contains records, returns current count.
+        If force_reindex is False and the collection already holds exactly the chunks the current
+        chunking code produces, returns the current count. If the stored chunk IDs differ (for
+        example the index was built by an older version of the chunker, so its metadata or text is
+        out of date), the stale chunks are deleted and every current chunk is upserted again.
         """
         collection = self.get_collection()
         current_count = collection.count()
 
-        if current_count > 0 and not force_reindex:
-            logger.info("Vector collection '%s' already contains %d records. Skipping full reindex.", self.collection_name, current_count)
-            return current_count
-
-        logger.info("Starting document indexing for collection '%s' (force_reindex=%s)...", self.collection_name, force_reindex)
+        logger.info(
+            "Preparing document index for collection '%s' (existing=%d, force_reindex=%s)...",
+            self.collection_name,
+            current_count,
+            force_reindex,
+        )
         chunks = load_and_chunk_all_documents(raw_dir=raw_dir, records_json_path=records_json_path)
 
-        indexed_count = self.add_chunks(chunks)
-        return indexed_count
+        if current_count > 0 and not force_reindex:
+            return self.sync_chunks(chunks)
+        return self.add_chunks(chunks)
+
+    def sync_chunks(self, chunks: List[TextChunk]) -> int:
+        """Make the collection match `chunks` exactly, re-embedding only when it is out of date.
+
+        Chunk IDs contain a hash of the chunk text, so if the stored IDs equal the expected IDs the
+        index is current and nothing is embedded. Otherwise stale IDs are deleted and every expected
+        chunk is upserted again (this also refreshes metadata such as `source_url`).
+
+        Returns:
+            Number of chunks stored in the collection after synchronisation.
+        """
+        collection = self.get_collection()
+        expected_ids = {c.id for c in chunks}
+        stored_ids = set(collection.get(include=[])["ids"])
+
+        if stored_ids == expected_ids:
+            logger.info(
+                "Vector collection '%s' already contains %d up-to-date chunks. Skipping reindex.",
+                self.collection_name,
+                len(stored_ids),
+            )
+            return len(stored_ids)
+
+        stale_ids = sorted(stored_ids - expected_ids)
+        logger.warning(
+            "Vector collection '%s' is out of date (%d stale, %d missing chunks). Rebuilding index...",
+            self.collection_name,
+            len(stale_ids),
+            len(expected_ids - stored_ids),
+        )
+        for i in range(0, len(stale_ids), 500):
+            collection.delete(ids=stale_ids[i : i + 500])
+        return self.add_chunks(chunks)
 
     def query_similar(
         self,

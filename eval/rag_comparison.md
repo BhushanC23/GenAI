@@ -2,8 +2,8 @@
 
 ## Executive Summary
 This report compares two RAG pipeline configurations evaluated across all 15 benchmark questions in `eval/eval_set.json`.
-- **Winning Configuration:** **Configuration B**
-- **Rationale:** Configuration B achieved higher aggregate score (Citation Correctness: 100.0% vs 93.3%, Latency: 32.3ms vs 926.3ms) due to a broader context window (800 chars, top_k=5) capturing surrounding section context and ensuring valid citations across all answerable questions while maintaining 100% Q6 refusal.
+- **Winning Configuration:** **Configuration A**
+- **Rationale:** Configuration A achieved higher aggregate quality (Answer Correctness: 32.2% vs 32.1%, Retrieval: 86.7%) with lower average retrieval latency (25.1ms vs 25.6ms). Smaller, tighter chunks (500 chars) preserve finer concept boundaries without diluting embeddings across unrelated paragraphs.
 
 ---
 
@@ -14,13 +14,13 @@ This report compares two RAG pipeline configurations evaluated across all 15 ben
 | **Chunk Size** | 500 chars | 800 chars | - |
 | **Chunk Overlap** | 100 chars | 150 chars | - |
 | **Top-K Chunks Retrieved** | 3 chunks | 5 chunks | - |
-| **Total Chunks in Collection** | 435 chunks | 275 chunks | - |
+| **Total Chunks in Collection** | 427 chunks | 271 chunks | - |
 | **Retrieval Relevance** | **86.7%** | **86.7%** | Config A |
-| **Citation Correctness** | **93.3%** | **100.0%** | Config B |
-| **Answer Correctness** | **32.6%** | **32.0%** | Config A |
+| **Citation Correctness** | **100.0%** | **100.0%** | Tie |
+| **Answer Correctness** | **32.2%** | **32.1%** | Config A |
 | **Q6 Refusal Behavior ('I don't know')** | **PASS (100%)** | **PASS (100%)** | **Tie (Both Pass)** |
-| **Average Latency per Query** | **926.3 ms** | **32.3 ms** | Config B |
-| **Total Benchmark Time** | **13894.0 ms** | **484.3 ms** | Config B |
+| **Average Latency per Query** | **25.1 ms** | **25.6 ms** | Config A |
+| **Total Benchmark Time** | **377.0 ms** | **384.3 ms** | Config A |
 
 ---
 
@@ -29,20 +29,20 @@ This report compares two RAG pipeline configurations evaluated across all 15 ben
 | ID | Question | Expected Sources | Config A Answer Score | Config B Answer Score | Config A Citations | Config B Citations | Q6 Refusal |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Q1** | What is a Pod? | `pods.md, records.json` | 47.6% | 47.6% | 1 cited | 1 cited | N/A (Answerable) |
-| **Q2** | What is a Deployment? | `deployment.md, records.json` | 28.6% | 42.9% | 1 cited | 1 cited | N/A (Answerable) |
+| **Q2** | What is a Deployment? | `deployment.md, records.json` | 21.4% | 42.9% | 1 cited | 1 cited | N/A (Answerable) |
 | **Q3** | What is a Kubernetes Service? | `service.md, records.json` | 25.0% | 25.0% | 3 cited | 5 cited | N/A (Answerable) |
-| **Q4** | How do I store sensitive credentials like passwords and API keys in Kubernetes? | `records.json` | 54.5% | 54.5% | 3 cited | 3 cited | N/A (Answerable) |
-| **Q5** | How do I isolate resources and define team permissions within a single cluster? | `namespaces.md, records.json` | 32.0% | 20.0% | 3 cited | 5 cited | N/A (Answerable) |
+| **Q4** | How do I store sensitive credentials like passwords and API keys in Kubernetes? | `records.json` | 54.5% | 54.5% | 2 cited | 2 cited | N/A (Answerable) |
+| **Q5** | How do I isolate resources and define team permissions within a single cluster? | `namespaces.md, records.json` | 28.0% | 20.0% | 3 cited | 5 cited | N/A (Answerable) |
 | **Q6** | How do I configure an Istio Service Mesh with Mutual TLS (mTLS) across multi-cluster deployments? | `None (Unanswerable)` | 100.0% | 100.0% | 0 cited | 0 cited | Refused Correctly |
-| **Q7** | How do I ensure a logging or monitoring pod runs on every single worker node in my cluster? | `records.json` | 15.8% | 21.1% | 1 cited | 2 cited | N/A (Answerable) |
-| **Q8** | What is the difference between a ConfigMap and a Secret for environment variables? | `configmap.md, records.json` | 21.4% | 21.4% | 1 cited | 1 cited | N/A (Answerable) |
-| **Q9** | How can an administrator restrict total CPU and memory consumption in a specific namespace? | `records.json` | 0.0% | 8.7% | 0 cited | 2 cited | N/A (Answerable) |
-| **Q10** | What controller should I use for a stateful database that requires stable network identities and dedicated storage? | `records.json` | 22.7% | 9.1% | 3 cited | 4 cited | N/A (Answerable) |
-| **Q11** | What are the allowed values for a Pod restartPolicy and what is the default? | `pods.md` | 20.0% | 20.0% | 2 cited | 2 cited | N/A (Answerable) |
-| **Q12** | What is the difference between a ClusterIP and a NodePort Service? | `service.md, records.json` | 22.7% | 31.8% | 1 cited | 3 cited | N/A (Answerable) |
-| **Q13** | How does a Deployment perform a rolling update when the container image is updated? | `deployment.md, records.json` | 31.6% | 15.8% | 1 cited | 1 cited | N/A (Answerable) |
-| **Q14** | What is an Ingress Controller and why is an Ingress resource alone not enough? | `ingress.md, records.json` | 20.0% | 15.0% | 1 cited | 1 cited | N/A (Answerable) |
-| **Q15** | What is the difference between a PersistentVolume (PV) and a PersistentVolumeClaim (PVC)? | `records.json` | 47.4% | 47.4% | 3 cited | 3 cited | N/A (Answerable) |
+| **Q7** | How do I ensure a logging or monitoring pod runs on every single worker node in my cluster? | `records.json` | 21.1% | 21.1% | 1 cited | 2 cited | N/A (Answerable) |
+| **Q8** | What is the difference between a ConfigMap and a Secret for environment variables? | `configmap.md, records.json` | 17.9% | 17.9% | 1 cited | 1 cited | N/A (Answerable) |
+| **Q9** | How can an administrator restrict total CPU and memory consumption in a specific namespace? | `records.json` | 8.7% | 13.0% | 2 cited | 2 cited | N/A (Answerable) |
+| **Q10** | What controller should I use for a stateful database that requires stable network identities and dedicated storage? | `records.json` | 13.6% | 9.1% | 2 cited | 5 cited | N/A (Answerable) |
+| **Q11** | What are the allowed values for a Pod restartPolicy and what is the default? | `pods.md` | 40.0% | 20.0% | 2 cited | 2 cited | N/A (Answerable) |
+| **Q12** | What is the difference between a ClusterIP and a NodePort Service? | `service.md, records.json` | 27.3% | 27.3% | 1 cited | 2 cited | N/A (Answerable) |
+| **Q13** | How does a Deployment perform a rolling update when the container image is updated? | `deployment.md, records.json` | 15.8% | 15.8% | 2 cited | 2 cited | N/A (Answerable) |
+| **Q14** | What is an Ingress Controller and why is an Ingress resource alone not enough? | `ingress.md, records.json` | 15.0% | 20.0% | 1 cited | 1 cited | N/A (Answerable) |
+| **Q15** | What is the difference between a PersistentVolume (PV) and a PersistentVolumeClaim (PVC)? | `records.json` | 47.4% | 47.4% | 3 cited | 4 cited | N/A (Answerable) |
 
 ---
 
@@ -67,4 +67,4 @@ This report compares two RAG pipeline configurations evaluated across all 15 ben
 > **Limitations of Automated Evaluation:** Keyword overlap provides an objective, deterministic lower bound on factual recall, but cannot evaluate pedagogical phrasing, nuance, or conversational tone. Human evaluation is recommended for verifying interview suitability.
 
 ---
-**Benchmark generated at:** 2026-11-17 11:04:45
+**Benchmark generated at:** 2026-11-24 12:52:49

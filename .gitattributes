@@ -1,0 +1,4 @@
+# Shell scripts and the Dockerfile run inside a Linux container, so they must keep LF
+# line endings even when the repository is cloned on Windows with core.autocrlf=true.
+*.sh text eol=lf
+Dockerfile text eol=lf

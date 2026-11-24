@@ -58,7 +58,7 @@ def startup_event() -> None:
         from app.vectorstore import get_vector_store
 
         store = get_vector_store()
-        store.get_collection()
+        store.index_documents(force_reindex=False)
     except Exception as exc:
         logger.warning("Vector store startup warmup failed: %s", exc)
 

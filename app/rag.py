@@ -175,6 +175,14 @@ def is_context_sufficient(
     matched_keywords = [kw for kw in query_keywords if kw in corpus]
     coverage = len(matched_keywords) / len(query_keywords)
 
+    # If none of the query's keywords appear in the retrieved text, the question is unrelated to the
+    # retrieved documents even when the vector similarity looks moderate (e.g. "capital of France").
+    if not matched_keywords:
+        return (
+            False,
+            f"None of the query keywords ({', '.join(query_keywords[:5])}) appear in the retrieved context.",
+        )
+
     # If less than 25% of query keywords appear anywhere in retrieved chunks, context is insufficient
     if coverage < 0.25 and len(query_keywords) >= 3:
         return (

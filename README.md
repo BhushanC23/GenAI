@@ -13,8 +13,11 @@
 > - **Live Interactive Swagger Docs:** [`https://kubecoach.onrender.com/docs`](https://kubecoach.onrender.com/docs)  
 > - **Streamlit Live Web App:** [`https://huggingface.co/spaces/BhushanC23/KubeCoach`](https://huggingface.co/spaces/BhushanC23/KubeCoach)  
 > - **Merged Pull Request:** [PR #1 (Day 12 CI/CD & Docker Pipeline)](https://github.com/BhushanC23/GenAI/pull/1)  
-> - **CI Workflow:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (Ruff Lint, 154 Pytests, Docker Container Build)  
-> - **Professional Resume & Portfolio:** [`docs/resume.md`](docs/resume.md) (3 Core KubeCoach Bullets & Production Metrics)
+> - **CI Workflow:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (compileall, Ruff lint, Pytest, Docker build, GHCR publish on `main`)  
+> - **Professional Resume & Portfolio:** [`docs/resume.md`](docs/resume.md) (3 Core KubeCoach Bullets & Production Metrics)  
+> - **Final audit, interview prep and status tracker (Day 14):** [`PROGRESS.md`](PROGRESS.md), [`docs/interview.md`](docs/interview.md)
+
+> **Verification status (checked on Day 14):** GitHub Actions run #8 on `main` (commit `7b4b5ce`) completed successfully, including the GHCR image push. The Render and Hugging Face links above could **not** be verified from the audit machine (Render did not answer within 30 s, which can be a free-tier cold start; Hugging Face returned HTTP 401). Open them in a browser before presenting them as live.
 
 ## About
 KubeCoach is an AI-powered educational developer learning tool designed to explain Kubernetes concepts and kubectl commands in simple English using official Kubernetes documentation.
@@ -132,10 +135,10 @@ Official Kubernetes documentation is extensive and technically dense. Beginners 
 ## Day 7 Progress — Dense Embeddings & ChromaDB Semantic Search
 - **Document Chunking Engine ([`app/chunking.py`](app/chunking.py)):**
   - Developed a specialized documentation chunker for Kubernetes Markdown concepts and JSON records.
-  - Configurable sliding-window token/word chunking (`chunk_size=400`, `chunk_overlap=80` words) ensuring semantic continuity across chunk boundaries.
-  - Cleans raw Hugo shortcodes (`{{< ... >}}`), HTML comments, and formatting markers while preserving code blocks and command explanations.
-  - Generates deterministic, traceable chunk IDs (`doc:pod:chunk:001`, `record:pod:chunk:001`) with rich metadata preservation (`source`, `page`, `title`, `category`, `h2_section`).
-  - Chunks the entire knowledge base (18 structured records + 6 raw official Kubernetes concept documents: `pods.md`, `deployment.md`, `service.md`, `ingress.md`, `configmap.md`, `namespaces.md`) into **435 indexed chunks**.
+  - Configurable sliding-window **character** chunking (defaults in code: `chunk_size=500`, `chunk_overlap=100` characters) that prefers paragraph, sentence and word boundaries, so chunks keep semantic continuity across boundaries.
+  - Cleans the leading YAML frontmatter (Day 14 fix), raw Hugo shortcodes (`{{< ... >}}`), HTML comments, and formatting markers while preserving code blocks and command explanations.
+  - Generates deterministic chunk IDs of the form `<page>-c<index>-<8-char content hash>` (for example `pods-md-c001-0b87fa8b`) with metadata preservation (`source`, `source_url`, `page`, `title`, `category`, `chunk_index`).
+  - Chunks the entire knowledge base (18 structured records + 6 raw official Kubernetes concept documents: `pods.md`, `deployment.md`, `service.md`, `ingress.md`, `configmap.md`, `namespaces.md`) into **427 indexed chunks** (435 before the Day 14 frontmatter fix).
 - **Dense Vector Embeddings ([`app/embed.py`](app/embed.py)):**
   - Integrated `sentence-transformers` utilizing the pretrained `all-MiniLM-L6-v2` bi-encoder model, mapping text to dense 384-dimensional vector space ($\mathbb{R}^{384}$).
   - Built a lazy-loaded singleton embedding manager (`EmbeddingProvider`) supporting high-throughput batch encoding (`embed_texts`) and single-query encoding (`embed_query`).
@@ -158,8 +161,8 @@ Official Kubernetes documentation is extensive and technically dense. Beginners 
 - **Semantic Search Architecture Flow:**
   ```mermaid
   flowchart TD
-    A["Official Documentation<br/>(data/raw/*.md, data/records.json)"] --> B["Document Chunking Engine<br/>(app/chunking.py)<br/>chunk_size=400, overlap=80"]
-    B --> C["435 Document Chunks<br/>(Text + Metadata + Stable IDs)"]
+    A["Official Documentation<br/>(data/raw/*.md, data/records.json)"] --> B["Document Chunking Engine<br/>(app/chunking.py)<br/>chunk_size=500 chars, overlap=100"]
+    B --> C["427 Document Chunks<br/>(Text + Metadata + Stable IDs)"]
     C --> D["Dense Vector Embeddings<br/>(app/embed.py)<br/>all-MiniLM-L6-v2 (384 dims)"]
     D --> E["Persistent ChromaDB Store<br/>(data/chroma_db)<br/>HNSW Cosine Index"]
     F["User Query<br/>(GET /search/semantic?q=...)"] --> G["Query Embedding<br/>(app/embed.py)"]
@@ -178,7 +181,7 @@ Official Kubernetes documentation is extensive and technically dense. Beginners 
   - Retrieves top-$k$ nearest neighbor document chunks from persistent ChromaDB collections (`data/chroma_db`).
   - Implements a **generalized context sufficiency and domain coverage rule** (`is_context_sufficient`):
     - Evaluates semantic similarity thresholds ($S \ge 0.55$) and query entity coverage across retrieved text.
-    - Out-of-scope technologies (e.g. Istio Service Mesh, Nomad, Linkerd) are detected mathematically rather than hardcoded.
+    - Out-of-scope technologies (e.g. Istio Service Mesh, Nomad, Linkerd) are detected with a short list of out-of-scope technology names that must also be absent from the retrieved text, combined with the similarity and keyword-coverage checks (the list is hard-coded, not learned; see Known Limitations).
     - Questions lacking sufficient context receive an honest refusal: *"I don't know based on the provided official Kubernetes documentation."* with exactly **0 fake citations**.
   - Formats retrieved chunks into numbered context blocks (`[Context Block 1]`) with document titles, source URLs, and file paths.
   - Supports live inference via **Groq** and **Google Gemini**, with automatic fallback to a local grounded mock generator for offline development and testing.
@@ -212,21 +215,21 @@ Official Kubernetes documentation is extensive and technically dense. Beginners 
     - `Q15`: Differences between `PersistentVolume` (PV) and `PersistentVolumeClaim` (PVC).
 - **RAG Configuration Benchmark ([`eval/run_eval.py`](eval/run_eval.py) & [`eval/rag_comparison.md`](eval/rag_comparison.md)):**
   - Evaluated and compared two distinct architectural configurations across all 15 questions:
-    - **Configuration A:** Chunk size 500 chars, overlap 100 chars, top-$k=3$ (435 chunks indexed).
-    - **Configuration B:** Chunk size 800 chars, overlap 150 chars, top-$k=5$ (275 chunks indexed).
-  - Benchmark Summary:
+    - **Configuration A:** Chunk size 500 chars, overlap 100 chars, top-$k=3$ (427 chunks indexed).
+    - **Configuration B:** Chunk size 800 chars, overlap 150 chars, top-$k=5$ (271 chunks indexed).
+  - Benchmark Summary (**re-run on Day 14** with `python -m eval.run_eval` after the frontmatter and stale-index fixes; raw numbers in [`eval/eval_results.json`](eval/eval_results.json)):
 
     | Metric | Configuration A (500 chars, k=3) | Configuration B (800 chars, k=5) | Winning Config |
     | :--- | :--- | :--- | :--- |
-    | **Total Chunks in Collection** | 435 chunks | 275 chunks | Config A (Finer granularity) |
+    | **Total Chunks in Collection** | 427 chunks | 271 chunks | - |
     | **Retrieval Relevance** | **86.7%** | **86.7%** | **Tie** |
-    | **Citation Correctness** | **93.3%** | **100.0%** | **Configuration B** |
-    | **Answer Correctness (Recall)** | **32.6%** | **32.0%** | **Configuration A** |
+    | **Citation Correctness** | **100.0%** | **100.0%** | **Tie** |
+    | **Answer Correctness (keyword recall)** | **32.2%** | **32.1%** | **Tie (0.1 point apart)** |
     | **Q6 Refusal ('I don't know')** | **PASS (100%)** | **PASS (100%)** | **Tie (Both Pass)** |
-    | **Average Latency per Query** | **29.6 ms** | **24.6 ms** | **Configuration B** |
-    | **Overall Benchmark Winner** | - | **Configuration B** | Higher citation coverage & speed |
+    | **Average Latency per Query** | **25.1 ms** | **25.6 ms** | **Tie (within noise)** |
 
-  - **Winning Configuration Rationale:** **Configuration B** achieved higher aggregate score by providing 100.0% citation correctness across all answerable questions (capturing necessary surrounding section context with top-$k=5$) and lower retrieval latency (24.6ms over 275 indexed chunks), while maintaining 100% refusal accuracy on out-of-scope question Q6.
+  - **Honest reading of the result:** the two configurations are effectively tied. The Day 8 run (435 / 275 chunks) had reported Configuration B ahead (citation correctness 93.3% vs 100%). The application's real defaults are Configuration A (`chunk_size=500`, `chunk_overlap=100`, `top_k=3`). Note that "citation correctness" here only checks that citations are non-empty and have a title and URL (it is **not** a human judgement of whether the cited page answers the question), and "answer correctness" is keyword recall against a short reference answer.
+  - **Day 14 evaluation-script fixes:** `eval/run_eval.py` no longer crashes when the optional `hnswlib` package is absent, treats record-derived chunks as matches for the expected source `records.json`, and runs one untimed warm-up query so lazy model loading is not counted as latency of the first configuration.
 - **Comprehensive Test Suite ([`tests/test_day08.py`](tests/test_day08.py)):**
   - Added 16 automated unit tests validating RAG execution, citation deduplication, context sufficiency checks, Q6 refusal, empty query handling, `POST /ask` contract/422 validations, and endpoint regression.
   - Project test suite now totals **79 passing unit tests** across Days 3, 4, 6, 7, and 8.
@@ -431,9 +434,43 @@ Comprehensive Documentation Guides:
   - Added observability endpoints `GET /cache/stats` (cache size, hits, misses, hit ratio) and `POST /cache/clear`.
 - **Verified GitHub Actions CI & GHCR Publishing:**
   - Configured least-privilege CI workflow with `permissions: contents: read` and `packages: write` on main branch push.
-  - Automated Docker multi-platform build and publishing to GitHub Container Registry (`ghcr.io/bhushanc23/genai:latest` and commit SHA tag).
+  - Automated single-stage Docker build (linux/amd64 runner) and publishing to GitHub Container Registry (`ghcr.io/bhushanc23/genai:latest` and commit SHA tag).
 - **Portfolio & Resume Documentation:**
   - Authored [`docs/resume.md`](docs/resume.md) containing 3 high-impact, metric-driven resume bullets for software and AI engineering roles.
+
+---
+
+## Day 14 Progress — Final Audit, Fixes & Interview Preparation
+
+- **New documents:** [`docs/interview.md`](docs/interview.md) (60-second pitch, hardest-problem story, 10 interview questions, architecture, demo script, "what I must be able to explain") and [`PROGRESS.md`](PROGRESS.md) (Day 1 to 15 tracker with evidence and open items).
+- **Defects found by running the real application and fixed** (regression tests in [`tests/test_day14.py`](tests/test_day14.py)):
+  1. *Stale vector index:* a ChromaDB index built by an older chunker was never refreshed, so 417 of 435 stored chunks had IDs the current code no longer produces and **citations to the raw pages showed `raw/pods.md` instead of the official URL**. `KubeCoachVectorStore.sync_chunks()` now compares stored and expected chunk IDs and rebuilds only when they differ; `index_documents()` and the API start-up use it.
+  2. *YAML frontmatter inside chunks:* page metadata (`reviewers`, `title`, `weight`) was embedded and appeared at the start of answers. `clean_markdown_for_chunking()` now strips it.
+  3. *Off-topic questions answered:* "What is the capital of France?" passed the sufficiency check (similarity 0.59, no keyword rule for two-word queries). `is_context_sufficient()` now refuses when none of the query keywords appear in the retrieved text.
+  4. *`eval/run_eval.py` crashed on a clean install* because of an unconditional `import hnswlib`; it also compared against the wrong source label for record chunks and counted model loading as latency. All three are fixed (see Day 8 benchmark above).
+  5. *Docker on Windows:* `.gitattributes` keeps `docker-entrypoint.sh` and `Dockerfile` on LF line endings so a Windows clone with `core.autocrlf=true` does not produce an unusable entrypoint. The previously uncommitted Dockerfile change (CPU-only PyTorch, tests and docs copied so `docker run ... test` works) and the start-up index warm-up in `app/main.py` are now committed.
+- **Verified:** `162 passed`, 75% coverage, `ruff` and `compileall` clean, `python -m eval.run_eval` completes (Q6 refused with 0 citations in both configurations), live API smoke test of `/health`, `/search`, `/search/semantic`, `/ask`, `/agent`, `/agent/approve`, validation errors (422/404/409) and the Streamlit server (HTTP 200).
+- **Not verified:** a local Docker image run (Docker Desktop stopped after the audit machine ran out of disk space; the image is built and published by GitHub Actions instead, see [`PROGRESS.md`](PROGRESS.md)), live Groq/Gemini calls (no API key was available), and the Render / Hugging Face links.
+
+---
+
+## Known Limitations
+
+- **Small knowledge base.** Only 6 official pages (Pods, Deployments, Services, Ingress, ConfigMaps, Namespaces) and 18 summary records are indexed. Topics outside them (for example HorizontalPodAutoscaler, StatefulSet details beyond its record) are answered from the nearest unrelated text or refused, depending on the sufficiency rule.
+- **Heuristic refusal.** `is_context_sufficient()` combines a similarity threshold (0.55), a short hard-coded list of out-of-scope technologies (Istio, Terraform, Nomad, ...) and keyword coverage. It is a heuristic, not a proof. Measured on Day 14: Q6 (Istio mTLS) has top similarity 0.74, higher than answerable questions Q5 (0.72), Q9 (0.73) and Q10 (0.64), so Q6 is refused by the out-of-scope term rule (the word "istio" is not in the retrieved text), not by the similarity threshold. A question whose words appear somewhere in the retrieved text (for example "What is a Horizontal Pod Autoscaler?") is treated as answerable even though the extractive mock answer then shows the Pods introduction instead of an HPA definition.
+- **Citations are retrieval sources, not sentence-level attribution.** Every retrieved chunk that passes the sufficiency check is cited, even if the answer used only the first one.
+- **Offline (mock) answers are extractive.** Without a Groq or Gemini key the answer is the first sentences of the best chunk, so it may not contain the requested `kubectl` command. The live LLM path was not exercised in the Day 14 audit.
+- **No authentication or rate limiting.** `POST /cache/clear`, `GET /feedback` and all other endpoints are open; the in-memory cache and agent `MemorySaver` sessions are lost on restart and are not shared between workers.
+- **First start needs network access** to download the `all-MiniLM-L6-v2` model from Hugging Face (it is not baked into the Docker image).
+- **Evaluation metrics are simple.** Keyword recall and "citations are non-empty" do not measure whether an answer is truly correct; 15 questions is a small sample.
+
+## Future Improvements
+
+- Index more official concept pages (HPA, StatefulSet, Jobs, Storage) and re-run `eval/run_eval.py`.
+- Add sentence-level citations and a reranking step so only the chunks actually used are cited.
+- Bake the embedding model into the Docker image, and publish the workflow's `packages: write` permission only to a separate publish job.
+- Add API authentication and rate limiting before any public deployment.
+- Add a small human-reviewed answer-quality set to complement keyword recall.
 
 ---
 
@@ -477,16 +514,27 @@ flowchart TD
     subgraph CI_CD_Infrastructure [DevOps & Cloud Deployment]
         GH[GitHub Repository: BhushanC23/GenAI] --> GHA[GitHub Actions CI Pipeline]
         GHA --> Ruff[Ruff PEP 8 Linter]
-        GHA --> Pytest[154 Pytest Test Suite]
-        GHA --> DockerBuild[Docker Multi-Stage Build]
+        GHA --> Pytest[Pytest Test Suite]
+        GHA --> DockerBuild[Docker Build]
         DockerBuild --> GHCR[(GitHub Container Registry: ghcr.io)]
         DockerBuild --> Render[Render Cloud Web Service]
     end
 ```
 
-### 2. Production Latency & Performance Telemetry (Measured Numbers)
+### 2. Latency & Performance Telemetry
 
-We conducted rigorous benchmark profiling comparing cold queries (requiring dense vector retrieval and neural synthesis) against cached query executions and lexical TF-IDF searches across 50 simulated student query requests:
+> **Day 14 verification note.** The Day 13 figures further below (1,420 ms cold, 3.8 ms cached, token counts, dollar costs, "60% hit rate") are **estimates that cannot be reproduced from this repository**: no benchmark script is committed, the token counts are character-count estimates (`chars // 4`) and no paid LLM was called. Do not quote them as measurements.
+
+**Measured on Day 14** (local Windows laptop, real `all-MiniLM-L6-v2` embeddings and ChromaDB, **mock LLM provider** because no API key was configured, `POST /ask` with `top_k=3`, 10 different eval questions; the machine was also running a Docker build, so treat the numbers as indicative only):
+
+| Path | Requests | P50 `latency_ms` | P95 `latency_ms` |
+|:---|:---:|:---:|:---:|
+| Cache miss (retrieval + extractive mock answer) | 10 | 110.5 ms | 222.9 ms |
+| Cache hit (same question again, `cached: true`) | 30 | 0.01 ms | 0.01 ms |
+
+`GET /cache/stats` after the run reported 30 hits, 10 misses (hit ratio 0.75). Latency with a real Groq or Gemini model was **not** measured.
+
+**Day 13 estimates (not reproducible, kept for history):**
 
 - **Cold RAG Pipeline (Embedding + ChromaDB Retrieval + LLM Synthesis):**
   - **P50 Latency:** **1,420 ms**
@@ -581,6 +629,7 @@ GenAI/
 │   ├── day09_architecture.md # Day 9: Agent, LangGraph, MemorySaver & HITL architecture
 │   ├── docker.md            # Day 12: Comprehensive Docker containerization guide
 │   ├── how_llms_work.md     # Day 5: Beginner-friendly LLM internals guide
+│   ├── interview.md         # Day 14: Pitch, hardest-problem story, 10 interview Q&A, demo script
 │   ├── resume.md            # Day 13: Professional resume bullets & portfolio metrics
 │   ├── testing.md           # Day 11: Comprehensive testing & QA documentation
 │   └── screenshots/         # Day 10: UI screenshots
@@ -608,13 +657,16 @@ GenAI/
 │   ├── test_day09.py        # Day 9 test suite (29 tests)
 │   ├── test_day10.py        # Day 10 test suite (14 tests)
 │   ├── test_day11.py        # Day 11 QA & regression test suite (28 tests)
-│   └── test_day13.py        # Day 13 Observability, cache & telemetry test suite (4 tests)
+│   ├── test_day13.py        # Day 13 Observability, cache & telemetry test suite (4 tests)
+│   └── test_day14.py        # Day 14 audit regression tests (8 tests: frontmatter, stale index, off-topic refusal)
 ├── ui/
 │   ├── __init__.py
 │   ├── api_client.py        # Day 10: Isolated FastAPI HTTP client with timeouts & errors
 │   ├── app.py               # Day 10: Professional Streamlit UI application
 │   └── relationships.py     # Day 10: Kubernetes Object Relationship Strip engine & HTML
 ├── .dockerignore            # Day 12: Docker build context exclusions (secrets, venvs, caches)
+├── .gitattributes           # Day 14: Keep LF line endings for Dockerfile and shell scripts
+├── PROGRESS.md              # Day 14: Day 1-15 status tracker with evidence and open items
 ├── .env.example             # Day 6-12: Environment configuration template (API_BASE_URL)
 ├── day01_intro.py           # Day 1 introduction script
 ├── day01_menu.py            # Day 1 menu script
@@ -794,21 +846,22 @@ Example JSON response from `POST /ask`:
 ```json
 {
   "question": "What is a Pod and what command lists running pods?",
-  "answer": "Based on official Kubernetes documentation for Pods (workload):\n\nA Pod is the smallest deployable compute unit in Kubernetes. Replicated Pods are usually created and managed as a group by a workload resource and its controller.\n\nExample command:\n```bash\nkubectl get pods -o wide\n```",
+  "answer": "Based on official Kubernetes documentation for Pods (workload):\n\n_Pods_ are the smallest deployable units of computing that you can create and manage in Kubernetes. A _Pod_ (as in a pod of whales or pea pod) is a group of one or more\ncontainers, with shared storage and network resources, and a specification for how to run the containers. A Pod's contents are always co-located and\nco-scheduled, and run in a shared context.",
   "citations": [
     {
       "document_title": "Pods",
       "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
       "page": "pods.md",
-      "chunk_id": "doc:pods:chunk:001"
+      "chunk_id": "pods-md-c001-0b87fa8b"
     }
   ],
   "retrieved_chunks": [
     {
-      "chunk_id": "doc:pods:chunk:001",
-      "text": "A Pod is the smallest deployable compute unit in Kubernetes...",
-      "similarity": 0.8909,
+      "chunk_id": "pods-md-c001-0b87fa8b",
+      "text": "_Pods_ are the smallest deployable units of computing that you can create and manage in Kubernetes...",
+      "similarity": 0.8833,
       "source": "raw/pods.md",
+      "source_url": "https://kubernetes.io/docs/concepts/workloads/pods/",
       "page": "pods.md",
       "title": "Pods",
       "category": "workload"
@@ -830,6 +883,7 @@ Example JSON refusal response from `POST /ask` on out-of-scope question Q6:
   "context_sufficient": false
 }
 ```
+> Day 14 note: in the running application the refusal response still lists the three closest chunks in `retrieved_chunks` (for Q6 their similarity is about 0.7, from the Service and Ingress pages) so a reviewer can see what was retrieved. `citations` is always empty and `context_sufficient` is `false` when the question is refused.
 
 #### Test AI Agent Endpoints (`POST /agent` & `POST /agent/approve`) with cURL:
 
@@ -938,14 +992,15 @@ python -m app.smart_search
 ### 9. Run Document Chunking & ChromaDB Vector Indexer
 
 ```bash
-# Ingest official documentation and records into persistent ChromaDB
-python -m app.vectorstore
+# Ingest official documentation and records into persistent ChromaDB.
+# The API also does this automatically at startup, and rebuilds the index if it is out of date.
+python -c "from app.vectorstore import get_vector_store; print(get_vector_store().index_documents())"
 ```
 
-### 11. Run Complete Test Suite (Days 3 to 13)
+### 11. Run Complete Test Suite (Days 3 to 14)
 
 ```bash
-# Run full test suite with modern pytest (154 tests total)
+# Run full test suite with modern pytest (162 tests total on Day 14)
 pytest tests/ -v
 
 # Run full test suite with code coverage measurement (75% project coverage)
@@ -960,7 +1015,7 @@ pytest tests/test_day11.py -v
 # Run full regression test suite using Python standard unittest
 python -m unittest discover tests -v
 ```
-**Actual Verified Results:** `Ran 154 tests — OK` (**4 / 4** Day 13 observability & caching tests + **28 / 28** Day 11 QA tests + **14 / 14** Day 10 tests + **29 / 29** Day 9 tests + **79 / 79** regression tests across Days 3, 4, 6, 7, and 8 with 0 errors and 0 failures). Overall code coverage: **75%**.
+**Actual Verified Results (Day 14, `pytest tests/ -q --cov=app --cov=ui`, Python 3.11.9):** `162 passed in 87.13s`, total coverage **75%** (`app/` and `ui/`). The 162 tests are the 154 tests of Days 3 to 13 plus **8 new Day 14 regression tests** in `tests/test_day14.py`. `ruff check .` and `python -m compileall -q app tests ui eval analysis day01_intro.py day01_menu.py` both exit cleanly.
 
 ### 12. Run Earlier Day Modules
 

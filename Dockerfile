@@ -27,14 +27,18 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install dependencies into system Python without saving pip cache
+# Install CPU-optimized PyTorch first for lightweight, fast container builds
 RUN pip install --no-cache-dir -U pip && \
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy application code, datasets, prompts, and configuration
+# Copy application code, datasets, prompts, tests, and configuration
 COPY app/ ./app/
 COPY data/ ./data/
 COPY prompts/ ./prompts/
 COPY ui/ ./ui/
+COPY tests/ ./tests/
+COPY docs/ ./docs/
 COPY .streamlit/ ./.streamlit/
 COPY day01_intro.py day01_menu.py README.md .env.example pytest.ini ./
 COPY docker-entrypoint.sh ./

@@ -27,9 +27,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# Initialize ChromaDB and HNSW vector runtime before other C-extensions
-import hnswlib
-import chromadb
+# Initialize ChromaDB and HNSW vector runtime before other C-extensions.
+# Newer ChromaDB releases no longer install `hnswlib`, so the import is optional (same as app/main.py).
+try:
+    import hnswlib  # noqa: F401
+except ImportError:
+    pass
+import chromadb  # noqa: F401
 
 from app.chunking import load_and_chunk_all_documents
 from app.rag import STOP_WORDS, execute_rag_pipeline, extract_keywords
@@ -97,10 +101,16 @@ def evaluate_single_response(
         retrieved_pages = {c.get("page", "").lower() for c in retrieved_chunks}
         retrieved_sources = {c.get("source", "").lower() for c in retrieved_chunks}
         all_retrieved = retrieved_pages.union(retrieved_sources)
+        # Chunks built from data/records.json carry a `record_id` in their metadata; their
+        # `source` is the official documentation URL, so "records.json" never appears in a string.
+        has_record_chunk = any(
+            (c.get("metadata") or {}).get("record_id") for c in retrieved_chunks
+        )
 
         matched_srcs = [
             es for es in expected_sources
             if any(es.lower() in r for r in all_retrieved)
+            or (es.lower() == "records.json" and has_record_chunk)
         ]
         retrieval_ok = len(matched_srcs) > 0 or len(expected_sources) == 0
 
@@ -134,28 +144,22 @@ def index_configuration_collection(
 ) -> KubeCoachVectorStore:
     """Index documents into a dedicated collection for a specific chunk configuration."""
     store = KubeCoachVectorStore(collection_name=collection_name)
-    coll = store.get_collection()
-    cnt = coll.count()
+    store.get_collection()
 
-    if cnt == 0:
-        logger.info(
-            "Indexing dedicated collection '%s' (chunk_size=%d, chunk_overlap=%d)...",
-            collection_name,
-            chunk_size,
-            chunk_overlap,
-        )
-        chunks = load_and_chunk_all_documents(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-        )
-        store.add_chunks(chunks)
-        logger.info("Indexed %d chunks into collection '%s'.", len(chunks), collection_name)
-    else:
-        logger.info(
-            "Collection '%s' already indexed with %d chunks. Reusing existing collection.",
-            collection_name,
-            cnt,
-        )
+    logger.info(
+        "Syncing dedicated collection '%s' (chunk_size=%d, chunk_overlap=%d)...",
+        collection_name,
+        chunk_size,
+        chunk_overlap,
+    )
+    chunks = load_and_chunk_all_documents(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+    )
+    # Re-embeds only when the stored chunks differ from the chunks the current code produces,
+    # so a stale collection from an older chunker is never silently reused.
+    total = store.sync_chunks(chunks)
+    logger.info("Collection '%s' holds %d chunks.", collection_name, total)
 
     return store
 
@@ -179,6 +183,10 @@ def run_configuration_benchmark(
 
     results: List[Dict[str, Any]] = []
     total_latency_ms = 0.0
+
+    # Warm-up query (not timed): the first query lazily loads the embedding model, which would
+    # otherwise be counted as retrieval latency for whichever configuration runs first.
+    store.query_similar(query_text="warm up", n_results=1)
 
     for idx, q_row in enumerate(eval_set, start=1):
         q_text = q_row["question"]

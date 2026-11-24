@@ -426,18 +426,22 @@ Upgrade `/search` to use smart/TF-IDF search as assigned.
 
 **Commit prefix:** `day-13:`
 
-### Day 14 — Deployment, security, monitoring, cost, architecture and portfolio (high-level known scope)
-The training overview identifies deployment and production considerations as remaining focus.
+### Day 14 — Interview Preparation + Build Sprint
+**Source:** Day 14 task instructions provided by the student (final Day 14 master execution prompt, 24 Nov 2026). The earlier high-level scope ("deployment, security, monitoring, cost") is superseded by this card.
 
-**Working scope only**
-- Deployment to the assigned platform, if any.
-- Environment configuration and secrets.
-- Security review (input validation, authentication/authorization if required, dependency and secret hygiene).
-- Monitoring/logging and error handling.
-- API/LLM usage and cost awareness.
-- Architecture explanation and portfolio/resume preparation.
+**Exact instructions**
+1. Write `docs/interview.md` with a 60-second KubeCoach pitch.
+2. Include the student's hardest-problem story.
+3. Prepare answers to 10 likely interview questions.
+4. Add or update `PROGRESS.md`.
+5. Close the completed Day 14 checklist items.
+6. Tag the final work and push with a commit message beginning with `day-14:`.
 
-Do not assume a specific hosting platform or exact task until the official card is supplied.
+**Deliverables:** `docs/interview.md`, `PROGRESS.md`.
+
+**Commit prefix:** `day-14:` (tag name not specified by the card; `day-14` was used).
+
+**Done on Day 14 (evidence in `PROGRESS.md`):** both documents written; a risk-based audit of the running application fixed a stale vector index (wrong citation URLs), frontmatter leakage, an over-permissive answer rule and a crashing evaluation script; `tests/test_day14.py` adds 8 regression tests (162 tests total).
 
 ### Day 15 — Final evaluation and presentation
 **Known overall evaluation**
@@ -578,7 +582,7 @@ Use this section as a human-maintained status summary. Update it after each trai
 | 11 | Testing & QA | Completed | Commit `9334506` | Dual test runners (pytest/unittest), 150 tests passing (28 new QA tests), 74% coverage |
 | 12 | Docker, CI/CD & Deploy | Completed | Commit `0a4b5b6`, PR #1 (`8d0900f`) | CI (.github/workflows/ci.yml: ruff, pytest, docker build), PR #1 merged, live health URL, Docker & Compose |
 | 13 | GitHub Actions/CI & GHCR | Completed | Commit `7a390c1`, Run `44894135101` | CI/CD (compileall, ruff, pytest 150/150, docker build, GHCR publish ghcr.io/bhushanc23/genai) |
-| 14 | Deployment/production/portfolio | Must verify | Official task card pending | Cloud deployment & security |
+| 14 | Interview prep + build sprint | Completed | `docs/interview.md`, `PROGRESS.md`, tag `day-14` | 162 tests passing; see `PROGRESS.md` for open manual items |
 | 15 | Final evaluation | Must verify | Official task card pending | Viva demo & portfolio |
 
 Historical repository review (November 13, 2026): public repository, latest reviewed push was Day 4, commit `3c06cc5b73fe386b3f6675adb785ef456b52a2f3`, with 18 structured records and README reporting 34 tests. These are historical facts, not current status. Re-check repository and run tests before relying on them.

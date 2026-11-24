@@ -363,7 +363,7 @@ To keep the pipeline simple, beginner-friendly, and cost-free, the following are
 | **Python Syntax** | Bytecode compilation | **PASSED** | `compileall -q` clean exit (0 errors) |
 | **Code Style** | Ruff PEP 8 compliance | **PASSED** | `All checks passed!` (0 errors, 0 warnings) |
 | **Automated Tests** | 150 Pytest test cases | **PASSED** | 150 / 150 passed (100%) in 67.5s |
-| **Container Build** | Multi-stage Docker build | **PASSED** | Built with Docker Buildx in 2m 14s |
+| **Container Build** | Docker build (single-stage Dockerfile) | **PASSED** | Built with Docker Buildx in 2m 14s |
 | **GHCR Authentication** | `GITHUB_TOKEN` login | **PASSED** | Logged into `ghcr.io` successfully |
 | **GHCR Image Push** | Tagged & pushed to GHCR | **PASSED** | Pushed `latest`, `7a390c1`, and full SHA |
 | **Pipeline Status** | End-to-end execution | **SUCCESS** | GitHub Actions Run [#44894135101](https://github.com/BhushanC23/GenAI/actions/runs/44894135101) |
@@ -387,8 +387,8 @@ To keep the pipeline simple, beginner-friendly, and cost-free, the following are
 ### Q5: Why is `python -m compileall` used in the CI pipeline?
 **Answer:** `compileall` byte-compiles all Python source files in the project. It validates Python syntax across every module without actually executing the code, immediately flagging indentation errors or syntax mistakes.
 
-### Q6: How does the CI pipeline run 150 tests without needing real API keys?
-**Answer:** All tests use mocking (via `unittest.mock`) or mock providers (such as `MockEmbeddingProvider` and `MockLLMClient`). This ensures tests run completely offline, fast, and deterministically without exposing secrets.
+### Q6: How does the CI pipeline run the tests without needing real API keys?
+**Answer:** No test needs an LLM API key: when `GROQ_API_KEY` / `GEMINI_API_KEY` are absent the app uses the built-in mock provider (`call_mock_provider` in `app/llm.py` and the grounded mock answer in `app/rag.py`), and many tests also use `unittest.mock` or `MockEmbeddingProvider`. (Day 14 correction: a few tests, such as the semantic-search API tests, load the real `all-MiniLM-L6-v2` embedding model, which is downloaded from Hugging Face the first time it is used, so CI is not completely network-free.)
 
 ### Q7: Why do we build the Docker container in the CI pipeline if we don't deploy it?
 **Answer:** Building the Docker container validates that the `Dockerfile`, dependencies, and files build successfully in a clean Linux environment. It guarantees that the project is container-ready without deploying broken images.
