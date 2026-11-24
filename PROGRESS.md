@@ -81,9 +81,9 @@ Before the Day 14 fixes the suite had 154 passing tests; the earlier "150 tests"
 - `Dockerfile` reviewed: `python:3.11-slim`, single stage, non-root user `kubecoach` (UID 1000), `HEALTHCHECK` on `/health`, ports 8000 and 8501, entrypoint modes `api`, `ui`, `all`, `test`. Secrets are excluded by `.dockerignore`.
 - The Dockerfile change that was uncommitted when Day 14 started (CPU-only PyTorch, copy `tests/` and `docs/`) is committed on Day 14.
 - **Local image build and container run were not completed.** Docker Desktop on the audit machine was not running at the start, and it stopped working (read-only filesystem, "unable to start") when the C: drive ran out of free space during the builds. One local build from the Desktop folder produced an image with 0-byte files, so it proved nothing. Please free disk space, restart Docker Desktop, run `docker image rm kubecoach-day14:local kubecoach-day14:ctx` and `docker builder prune` to remove the leftovers of the audit, then run `docker build -t kubecoach .` and `docker run -p 8000:8000 kubecoach`.
-- The build **was** verified by GitHub Actions on the Dockerfile as committed before Day 14 (run #8 below).
+- The image **build** was verified by GitHub Actions: run #8 (Dockerfile as committed on Day 13) and run #9 (the Day 14 Dockerfile). Running the resulting container (`docker run`, health check, `/ask`) has not been verified anywhere.
 
-### CI/CD: Completed for run #8; the Day 14 commit Requires manual verification
+### CI/CD: Completed (runs #8 and #9 verified)
 
 Verified from the GitHub API on Day 14:
 
@@ -91,11 +91,12 @@ Verified from the GitHub API on Day 14:
 |---|---|---|---|
 | #1, #2 | `376a8d2` | push and pull request on `feature/day-12-ci-cd` | success |
 | #3 to #7 | `8d0900f` ... `63b2c17` | push to `main` | success |
-| **#8** (id 45056903970) | `7b4b5ce` (Day 13 head) | push to `main` | **success**, 15 steps including "Build Docker Container", "Log in to GHCR" and "Tag and Push Docker Image to GHCR" |
+| **#8** (id 45056903970) | `7b4b5ce` (Day 13 head) | push to `main` | **success**, including "Build Docker Container", "Log in to GHCR" and "Tag and Push Docker Image to GHCR" |
+| **#9** (id 45349312498) | `c80b4c4` (Day 14) | push to `main` | **success**: compileall, Ruff, Pytest, Docker build with the Day 14 Dockerfile (CPU-only PyTorch), GHCR login and push. https://github.com/BhushanC23/GenAI/actions/runs/45349312498 |
 
 - GHCR: the package page `github.com/BhushanC23/GenAI/pkgs/container/genai` is public and lists `docker pull ghcr.io/bhushanc23/genai:7b4b5cec400c1211e5a1139010d7ab9a71d44f20`.
 - Workflow review: triggers are `push` (`main`, `feature/**`), `pull_request` (to `main`) and `workflow_dispatch`; timeout 15 minutes; Python 3.11; GHCR login and push run only on a push to `main`. Note that `packages: write` is granted at workflow level to every step. A separate publish job would be safer (listed in section 7).
-- The run for the Day 14 commit is **Requires manual verification**: check https://github.com/BhushanC23/GenAI/actions after the push.
+- The run for the Day 14 commit (#9) passed every step, so the Dockerfile change that was uncommitted at the start of Day 14 builds correctly on a clean GitHub runner. The GHCR `latest` and SHA tags for `c80b4c4` were pushed by the last step; the package page was not re-opened after run #9.
 - Render (`https://kubecoach.onrender.com/health`) did not answer within 30 s from the audit machine (a free-tier cold start is possible) and Hugging Face (`huggingface.co/spaces/BhushanC23/KubeCoach`) returned HTTP 401: both **Requires manual verification**.
 
 ## 5. Day 14 audit: issues found and fixed
@@ -117,7 +118,7 @@ Verified from the GitHub API on Day 14:
 | `PROGRESS.md` (this file) | Completed |
 | Audit fixes with regression tests (`tests/test_day14.py`, 8 tests) | Completed |
 | README update (Day 14 section, limitations, future improvements, corrected numbers) | Completed |
-| Commit with prefix `day-14:` and tag `day-14` pushed to `origin/main` | Completed when the push is verified (see `git log` and the remote) |
+| Commit with prefix `day-14:` and tag `day-14` pushed to `origin/main` | Completed: commit `c80b4c4` is on `origin/main` (confirmed through the GitHub API) and tag `day-14` was pushed. This tracker update is a small follow-up commit after the tag |
 
 ## 7. Interview preparation status: Partially completed
 
@@ -126,7 +127,7 @@ The material is written ([`docs/interview.md`](docs/interview.md)). The student 
 ## 8. Final remaining issues and manual actions
 
 1. **Docker Desktop / disk space (manual).** Free disk space on C:, restart Docker Desktop, remove the audit images (`docker image rm kubecoach-day14:local kubecoach-day14:ctx`, `docker builder prune`), then build and run the image once.
-2. **Check GitHub Actions** for the Day 14 commit (https://github.com/BhushanC23/GenAI/actions). Today's Dockerfile change (CPU-only PyTorch) has not been built in CI yet.
+2. **Run the container once** after step 1 (`docker run -p 8000:8000 kubecoach`, then open `/health` and `/docs`); CI only proves the image builds.
 3. **Verify the Render and Hugging Face links** in a browser; remove them from the README and resume if they are not live.
 4. **Live LLM path** (Groq or Gemini with a real key) was not exercised. `GEMINI_MODEL` defaults to `gemini-1.5-flash`; confirm the model name is still served before demonstrating Gemini.
 5. **Known product limits** (see "Known Limitations" in `README.md`): 6 pages indexed, heuristic refusal rule, citations per retrieved chunk, extractive answers without an LLM key, no authentication or rate limiting, in-memory cache and agent memory.

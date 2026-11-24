@@ -17,7 +17,7 @@
 > - **Professional Resume & Portfolio:** [`docs/resume.md`](docs/resume.md) (3 Core KubeCoach Bullets & Production Metrics)  
 > - **Final audit, interview prep and status tracker (Day 14):** [`PROGRESS.md`](PROGRESS.md), [`docs/interview.md`](docs/interview.md)
 
-> **Verification status (checked on Day 14):** GitHub Actions run #8 on `main` (commit `7b4b5ce`) completed successfully, including the GHCR image push. The Render and Hugging Face links above could **not** be verified from the audit machine (Render did not answer within 30 s, which can be a free-tier cold start; Hugging Face returned HTTP 401). Open them in a browser before presenting them as live.
+> **Verification status (checked on Day 14):** GitHub Actions runs #8 (commit `7b4b5ce`) and #9 (Day 14 commit `c80b4c4`) on `main` completed successfully, including the Docker build and the GHCR image push. The Render and Hugging Face links above could **not** be verified from the audit machine (Render did not answer within 30 s, which can be a free-tier cold start; Hugging Face returned HTTP 401). Open them in a browser before presenting them as live.
 
 ## About
 KubeCoach is an AI-powered educational developer learning tool designed to explain Kubernetes concepts and kubectl commands in simple English using official Kubernetes documentation.
